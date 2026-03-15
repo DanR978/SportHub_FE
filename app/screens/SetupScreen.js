@@ -102,6 +102,31 @@ function DOBInput({ value, onChange, error }) {
     );
 }
 
+function StepName({ formData, update, errors }) {
+    return (
+        <View>
+            <Text style={styles.stepHeadline}>What's your name?</Text>
+            <Text style={styles.stepSub}>This is how other players will see you.</Text>
+            <View style={{flexDirection:'row',gap:10}}>
+                <View style={{flex:1}}>
+                    <View style={[styles.inputWrapper,errors.firstName&&styles.inputError]}>
+                        <TextInput style={styles.input} value={formData.firstName} onChangeText={v=>update({firstName:v})}
+                            placeholder="First name" placeholderTextColor="#bbb" autoCapitalize="words" autoFocus />
+                    </View>
+                    {errors.firstName&&<Text style={styles.errText}>{errors.firstName}</Text>}
+                </View>
+                <View style={{flex:1}}>
+                    <View style={[styles.inputWrapper,errors.lastName&&styles.inputError]}>
+                        <TextInput style={styles.input} value={formData.lastName} onChangeText={v=>update({lastName:v})}
+                            placeholder="Last name" placeholderTextColor="#bbb" autoCapitalize="words" />
+                    </View>
+                    {errors.lastName&&<Text style={styles.errText}>{errors.lastName}</Text>}
+                </View>
+            </View>
+        </View>
+    );
+}
+
 function StepAccount({ formData, update, errors }) {
     return (
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -182,11 +207,18 @@ function StepDetails({ formData, update, errors }) {
 
 export default function SetupScreen({ onComplete, authMethod='email', socialUser=null }) {
     const isSocial = authMethod==='google'||authMethod==='apple';
-    const STEPS = isSocial ? ['details','avatar'] : ['account','details','avatar'];
+    const needsName = isSocial && (!socialUser?.first_name || socialUser.first_name.trim() === '');
+    const STEPS = isSocial
+        ? (needsName ? ['name','details','avatar'] : ['details','avatar'])
+        : ['account','details','avatar'];
     const TITLES = isSocial
-        ? ['1 of 2 — Your Profile','2 of 2 — Your Look']
+        ? (needsName
+            ? ['1 of 3 — Your Name','2 of 3 — Your Profile','3 of 3 — Your Look']
+            : ['1 of 2 — Your Profile','2 of 2 — Your Look'])
         : ['1 of 3 — Account','2 of 3 — Your Profile','3 of 3 — Your Look'];
-    const SKIPPABLE = isSocial ? [false,true] : [false,false,true];
+    const SKIPPABLE = isSocial
+        ? (needsName ? [false,false,true] : [false,true])
+        : [false,false,true];
 
     const [step, setStep] = useState(0);
     const [errors, setErrors] = useState({});
@@ -216,6 +248,10 @@ export default function SetupScreen({ onComplete, authMethod='email', socialUser
     const validate = () => {
         const cur = STEPS[step];
         const e = {};
+        if(cur==='name'){
+            if(!formData.firstName.trim()) e.firstName='Required';
+            if(!formData.lastName.trim()) e.lastName='Required';
+        }
         if(cur==='account'){
             if(!formData.firstName.trim()) e.firstName='Required';
             if(!formData.lastName.trim()) e.lastName='Required';
@@ -275,6 +311,7 @@ export default function SetupScreen({ onComplete, authMethod='email', socialUser
             </View>
 
             <Animated.View style={[styles.content,{transform:[{translateX:slideAnim}]}]}>
+                {cur==='name'    && <StepName    formData={formData} update={update} errors={errors}/>}
                 {cur==='account' && <StepAccount formData={formData} update={update} errors={errors}/>}
                 {cur==='details' && <StepDetails formData={formData} update={update} errors={errors}/>}
                 {cur==='avatar' && <StepAvatar formData={formData} update={update}/>}

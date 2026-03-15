@@ -13,84 +13,173 @@ import EventDetailScreen from './app/screens/EventDetailScreen';
 import ProfileScreen from './app/screens/ProfileScreen';
 import SettingsScreen from './app/screens/SettingsScreen';
 import CreateEventScreen from './app/screens/CreateEventScreen';
-import { getToken, removeToken, getAuthMethod } from './app/services/auth';
+import EditProfileScreen from './app/screens/EditProfileScreen';
+import EditAvatarScreen from './app/screens/EditAvatarScreen';
+import DeleteSurveyScreen from './app/screens/DeleteSurveyScreen';
+import RatingPopup from './app/screens/RatingPopup';
 
-const Tab   = createBottomTabNavigator();
+import {
+    getToken, saveToken, removeToken, getAuthMethod,
+    saveUserCache, clearUserCache,
+    getTokenForEmail, getCachedAccounts,
+} from './app/services/auth';
+import { API_URL } from './app/config';
+
+const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
-const API_URL = 'http://192.168.4.131:8000';
 
-function TabNavigator({ onLogout }) {
+import appCallbacks from './app/services/appCallbacks';
+
+function TabNavigator() {
     return (
-        <Tab.Navigator screenOptions={({ route }) => ({
-            headerShown: false,
-            tabBarActiveTintColor: '#16a34a',
-            tabBarInactiveTintColor: '#999',
-            tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#f0f0f0', height: 80, paddingBottom: 8 },
-            tabBarIcon: ({ focused, color, size }) => {
-                const icons = {
-                    Explore:  focused ? 'compass'  : 'compass-outline',
-                    Profile:  focused ? 'person'   : 'person-outline',
-                    Settings: focused ? 'settings' : 'settings-outline',
-                };
-                return <Ionicons name={icons[route.name]} size={size} color={color} />;
-            },
-        })}>
-            <Tab.Screen name="Explore"  component={EventsScreen} />
-            <Tab.Screen name="Profile"  component={ProfileScreen} />
-            <Tab.Screen name="Settings" children={() => <SettingsScreen onLogout={onLogout} />} />
+        <Tab.Navigator
+            screenOptions={({ route }) => ({
+                headerShown: false,
+                tabBarActiveTintColor: '#16a34a',
+                tabBarInactiveTintColor: '#999',
+                tabBarStyle: {
+                    backgroundColor: '#fff',
+                    borderTopColor: '#f0f0f0',
+                    height: 80,
+                    paddingBottom: 8,
+                },
+                tabBarIcon: ({ focused, color, size }) => {
+                    const icons = {
+                        Explore: focused ? 'compass' : 'compass-outline',
+                        Profile: focused ? 'person' : 'person-outline',
+                        Settings: focused ? 'settings' : 'settings-outline',
+                    };
+                    return <Ionicons name={icons[route.name]} size={size} color={color} />;
+                },
+            })}
+        >
+            <Tab.Screen name="Explore" component={EventsScreen} />
+            <Tab.Screen name="Profile" component={ProfileScreen} />
+            <Tab.Screen name="Settings" component={SettingsScreen} />
         </Tab.Navigator>
     );
 }
 
-// Stack wraps the tabs so EventDetail can slide over everything
-function AppNavigator({ onLogout }) {
+function AppNavigator() {
     return (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Tabs" children={() => <TabNavigator onLogout={onLogout} />} />
-            <Stack.Screen
-                name="EventDetail"
-                component={EventDetailScreen}
-                options={{ animation: 'slide_from_bottom' }}
-            />
-            <Stack.Screen
-                name="CreateEvent"
-                component={CreateEventScreen}
-                options={{ animation: 'slide_from_bottom' }}
-/>
+            <Stack.Screen name="Tabs" component={TabNavigator} />
+            <Stack.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="CreateEvent" component={CreateEventScreen} options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="EditAvatar" component={EditAvatarScreen} options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="DeleteSurvey" component={DeleteSurveyScreen} options={{ animation: 'slide_from_bottom' }} />
         </Stack.Navigator>
     );
 }
 
 export default function App() {
-    const [state, setState]       = useState('welcome');
+    const [state, setState] = useState('welcome');
     const [setupInfo, setSetupInfo] = useState({ authMethod: 'email', socialUser: null });
+    const [cachedUsers, setCachedUsers] = useState([]);
     const crossFade = useRef(new Animated.Value(1)).current;
 
-    const transition = (newState) => {
-        Animated.timing(crossFade, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+    // Rating popup state
+    const [pendingRatings, setPendingRatings] = useState([]);
+    const [ratingPopupVisible, setRatingPopupVisible] = useState(false);
+    const [currentRatingEvent, setCurrentRatingEvent] = useState(null);
+
+    const transition = (newState, duration = 350) => {
+        Animated.timing(crossFade, { toValue: 0, duration: 250, useNativeDriver: true }).start(async () => {
             setState(newState);
-            Animated.timing(crossFade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+            Animated.timing(crossFade, { toValue: 1, duration: duration, useNativeDriver: true }).start();
         });
     };
 
+    // ── Check for unrated past events and show popup ─────────────
+    const checkPendingRatings = async () => {
+        try {
+            const token = await getToken();
+            if (!token) return;
+            const res = await fetch(`${API_URL}/users/me/pending-ratings`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.pending?.length > 0) {
+                    setPendingRatings(data.pending);
+                    setCurrentRatingEvent(data.pending[0]);
+                    // Small delay so the app loads first, then popup slides in
+                    setTimeout(() => setRatingPopupVisible(true), 1500);
+                }
+            }
+        } catch (e) {
+            console.log('Pending ratings check error:', e);
+        }
+    };
+
+    const handleRated = (eventId) => {
+        const remaining = pendingRatings.filter(e => e.event_id !== eventId);
+        setPendingRatings(remaining);
+        if (remaining.length > 0) {
+            // Show the next unrated event after a short pause
+            setCurrentRatingEvent(remaining[0]);
+            setTimeout(() => setRatingPopupVisible(true), 800);
+        }
+    };
+
+    // ── Auth check ───────────────────────────────────────────────
     const checkAuth = async () => {
         try {
             const token = await getToken();
-            if (!token) { transition('auth'); return; }
-            const res = await fetch(`${API_URL}/users/me`, { headers: { Authorization: `Bearer ${token}` } });
-            if (!res.ok) { transition('auth'); return; }
+            if (!token) {
+                const cached = await getCachedAccounts();
+                setCachedUsers(cached || []);
+                transition('auth');
+                return;
+            }
+            const res = await fetch(`${API_URL}/users/me`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) {
+                // Token expired or invalid — clear it so we don't loop
+                await removeToken();
+                const cached = await getCachedAccounts();
+                setCachedUsers(cached || []);
+                transition('auth');
+                return;
+            }
             const user = await res.json();
-            if (!user.date_of_birth || !user.nationality) {
+            await saveUserCache(user);
+
+            // Silently archive any expired events on login
+            fetch(`${API_URL}/sports-events/archive-expired`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            }).catch(() => {});
+
+            if (!user.date_of_birth || !user.nationality || !user.first_name) {
                 const method = await getAuthMethod();
                 setSetupInfo({ authMethod: method || 'email', socialUser: user });
                 transition('setup');
             } else {
-                transition('app');
+                transition('app', 450);
+                // After entering app, check if there are events to rate
+                checkPendingRatings();
             }
-        } catch { transition('auth'); }
+        } catch {
+            const cached = await getCachedAccounts();
+            setCachedUsers(cached || []);
+            transition('auth');
+        }
     };
 
     const handleLogin = () => checkAuth();
+
+    const handleSwitchToAccount = async (email) => {
+        const token = await getTokenForEmail(email);
+        if (token) {
+            await saveToken(token);
+            checkAuth();
+        } else {
+            checkAuth();
+        }
+    };
 
     const handleSignup = (authMethod, socialUser) => {
         setSetupInfo({ authMethod, socialUser });
@@ -100,29 +189,52 @@ export default function App() {
     const handleSetupComplete = async (formData) => {
         try {
             const token = await getToken();
-            await fetch(`${API_URL}/users/me`, {
+            const res = await fetch(`${API_URL}/users/me`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({
-                    first_name:    formData.firstName,
-                    last_name:     formData.lastName,
+                    first_name: formData.firstName,
+                    last_name: formData.lastName,
                     date_of_birth: formData.dateOfBirth || null,
-                    nationality:   formData.nationality || null,
-                    phone_number:  formData.phoneNumber || null,
-                    bio:           formData.bio || null,
-                    sports:        formData.sports?.length ? JSON.stringify(formData.sports) : null,
+                    nationality: formData.nationality || null,
+                    phone_number: formData.phoneNumber || null,
+                    bio: formData.bio || null,
+                    sports: formData.sports?.length ? JSON.stringify(formData.sports) : null,
                     avatar_config: formData.photo ? null : JSON.stringify(formData.avatar),
-                    avatar_photo:  formData.photo || null,
+                    avatar_photo: formData.photo || null,
                 }),
             });
-        } catch (e) { console.log('Setup save error:', e); }
-        transition('app');
+            if (res.ok) await saveUserCache(await res.json());
+        } catch (e) {
+            console.log('Setup save error:', e);
+        }
+        transition('app', 450);
+        checkPendingRatings();
     };
 
     const handleLogout = async () => {
-        await removeToken();
-        transition('auth');
+        const cached = await getCachedAccounts();
+        setCachedUsers(cached || []);
+        transition('auth', 400);
     };
+
+    const handleDeleted = async () => {
+        await removeToken();
+        await clearUserCache();
+        setCachedUsers([]);
+        transition('auth', 400);
+    };
+
+    const handleDeactivated = async () => {
+        await removeToken();
+        const cached = await getCachedAccounts();
+        setCachedUsers(cached || []);
+        transition('auth', 400);
+    };
+
+    appCallbacks.onLogout = handleLogout;
+    appCallbacks.onDeleted = handleDeleted;
+    appCallbacks.onDeactivated = handleDeactivated;
 
     return (
         <Animated.View style={{ flex: 1, opacity: crossFade }}>
@@ -132,13 +244,35 @@ export default function App() {
                     <ActivityIndicator size="large" color="#16a34a" />
                 </View>
             )}
-            {state === 'auth'  && <AuthScreen onLogin={handleLogin} onSignup={handleSignup} />}
-            {state === 'setup' && <SetupScreen onComplete={handleSetupComplete} authMethod={setupInfo.authMethod} socialUser={setupInfo.socialUser} />}
-            {state === 'app'   && (
+            {state === 'auth' && (
+                <AuthScreen
+                    onLogin={handleLogin}
+                    onSignup={handleSignup}
+                    cachedAccounts={cachedUsers}
+                    onSwitchToAccount={handleSwitchToAccount}
+                    onQuickLogin={handleLogin}
+                />
+            )}
+            {state === 'setup' && (
+                <SetupScreen
+                    onComplete={handleSetupComplete}
+                    authMethod={setupInfo.authMethod}
+                    socialUser={setupInfo.socialUser}
+                />
+            )}
+            {state === 'app' && (
                 <NavigationContainer>
-                    <AppNavigator onLogout={handleLogout} />
+                    <AppNavigator />
                 </NavigationContainer>
             )}
+
+            {/* Rating popup — shows after login if there are unrated past events */}
+            <RatingPopup
+                visible={ratingPopupVisible}
+                event={currentRatingEvent}
+                onClose={() => setRatingPopupVisible(false)}
+                onRated={handleRated}
+            />
         </Animated.View>
     );
 }
