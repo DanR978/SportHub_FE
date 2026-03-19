@@ -232,7 +232,7 @@ export default function SetupScreen({ onComplete, authMethod='email', socialUser
         password:'', confirmPassword:'', showPassword:false,
         dateOfBirth:'', country:null, sports:[], bio:'',
         photo:null,
-        avatar:{skinTone:'#F5C89A',hairStyle:'short',hairColor:'#1a1a1a',facialHair:'none',accessory:'none'},
+        avatar:{skinTone:'#F5C89A',hairStyle:'short',hairColor:'#1a1a1a',facialHair:'none',accessory:'none',eyeColor:'dark',expression:'neutral',jerseyNumber:''},
     });
 
     const update = changes => setFormData(prev=>({...prev,...changes}));

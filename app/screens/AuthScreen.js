@@ -16,34 +16,34 @@ WebBrowser.maybeCompleteAuthSession();
 const { width, height } = Dimensions.get('window');
 import { API_URL, GOOGLE_IOS_CLIENT_ID } from '../config';
 
-// ── Soccer field ──────────────────────────────────────────────────────────────
-function SoccerField() {
-    const fh = height, fw = width, pad = 20;
-    const lc = 'rgba(255,255,255,0.75)';
-    const penW = 160, penH = 90, goalW = 84, goalH = 40, arcW = 68, arcH = 34;
-    const diagSize = 56;
-    const numX = Math.ceil(fw / diagSize) + 2;
-    const numY = Math.ceil(fh / diagSize) + 2;
+// ── Map-style background — matches app icon ─────────────────────────────────
+function MapBackground() {
+    // Major grid positions (thicker, slightly more visible)
+    const majorH = [0.22, 0.48, 0.72];
+    const majorV = [0.28, 0.52, 0.76];
+    // Minor grid positions (thinner, more faded)
+    const minorH = [0.08, 0.15, 0.35, 0.42, 0.58, 0.63, 0.85, 0.93];
+    const minorV = [0.06, 0.15, 0.38, 0.44, 0.62, 0.68, 0.88, 0.95];
+
     return (
-        <View style={{ position: 'absolute', top: 0, left: 0, width: fw, height: fh, overflow: 'hidden' }}>
-            <View style={{ position: 'absolute', inset: 0, backgroundColor: '#27a03a' }} />
-            {[...Array(numY)].map((_, row) =>
-                [...Array(numX)].map((_, col) =>
-                    (row + col) % 2 === 0 ? (
-                        <View key={`${row}-${col}`} style={{ position:'absolute', width:diagSize*1.42, height:diagSize*1.42, backgroundColor:'#2eb843', opacity:0.65, transform:[{rotate:'45deg'}], left:col*diagSize-diagSize*0.21, top:row*diagSize-diagSize*0.21 }} />
-                    ) : null
-                )
-            )}
-            <View style={{ position:'absolute', top:pad+30, left:pad, right:pad, bottom:pad, borderWidth:2, borderColor:lc }} />
-            <View style={{ position:'absolute', top:fh*0.5, left:pad, right:pad, height:2, backgroundColor:lc }} />
-            <View style={{ position:'absolute', top:fh*0.5-52, left:fw/2-52, width:104, height:104, borderRadius:52, borderWidth:2, borderColor:lc }} />
-            <View style={{ position:'absolute', top:fh*0.5-5, left:fw/2-5, width:10, height:10, borderRadius:5, backgroundColor:lc }} />
-            <View style={{ position:'absolute', top:pad+30, left:fw/2-penW/2, width:penW, height:penH, borderWidth:2, borderColor:lc, borderTopWidth:0 }} />
-            <View style={{ position:'absolute', top:pad+30, left:fw/2-goalW/2, width:goalW, height:goalH, borderWidth:2, borderColor:lc, borderTopWidth:0 }} />
-            <View style={{ position:'absolute', top:pad+30+penH, left:fw/2-arcW/2, width:arcW, height:arcH, borderBottomLeftRadius:arcH, borderBottomRightRadius:arcH, borderWidth:2, borderColor:lc, borderTopWidth:0 }} />
-            <View style={{ position:'absolute', bottom:pad, left:fw/2-penW/2, width:penW, height:penH, borderWidth:2, borderColor:lc, borderBottomWidth:0 }} />
-            <View style={{ position:'absolute', bottom:pad, left:fw/2-goalW/2, width:goalW, height:goalH, borderWidth:2, borderColor:lc, borderBottomWidth:0 }} />
-            <View style={{ position:'absolute', bottom:pad+penH, left:fw/2-arcW/2, width:arcW, height:arcH, borderTopLeftRadius:arcH, borderTopRightRadius:arcH, borderWidth:2, borderColor:lc, borderBottomWidth:0 }} />
+        <View style={{ position:'absolute', top:0, left:0, width:width, height:height, overflow:'hidden' }}>
+            <LinearGradient colors={['#16a34a','#15803d','#14732d']} style={StyleSheet.absoluteFill} />
+            {/* Major roads */}
+            {majorH.map((yf,i) => (
+                <View key={`mh${i}`} style={{ position:'absolute', top: yf*height, left:0, right:0, height:2, backgroundColor:'rgba(255,255,255,0.08)' }} />
+            ))}
+            {majorV.map((xf,i) => (
+                <View key={`mv${i}`} style={{ position:'absolute', left: xf*width, top:0, bottom:0, width:2, backgroundColor:'rgba(255,255,255,0.08)' }} />
+            ))}
+            {/* Minor roads */}
+            {minorH.map((yf,i) => (
+                <View key={`nh${i}`} style={{ position:'absolute', top: yf*height, left:0, right:0, height:1, backgroundColor:'rgba(255,255,255,0.05)' }} />
+            ))}
+            {minorV.map((xf,i) => (
+                <View key={`nv${i}`} style={{ position:'absolute', left: xf*width, top:0, bottom:0, width:1, backgroundColor:'rgba(255,255,255,0.05)' }} />
+            ))}
+            {/* Subtle diagonal */}
+            <View style={{ position:'absolute', top:0, left:0, width:height*1.4, height:1, backgroundColor:'rgba(255,255,255,0.04)', transform:[{rotate:'50deg'}], transformOrigin:'top left' }} />
         </View>
     );
 }
@@ -61,14 +61,12 @@ function UserAvatar({ user, size = 56 }) {
 
 // ── Logo mark ────────────────────────────────────────────────────────────────
 function LogoMark({ dark = false }) {
-    const color = dark ? '#1a1a2e' : '#fff';
-    const accent = dark ? '#16a34a' : '#fff';
     return (
         <View style={{ flexDirection:'row', alignItems:'center', gap:10 }}>
-            <View style={{ flexDirection:'row', alignItems:'flex-end', gap:3 }}>
-                {[10,18,12].map((h,i) => <View key={i} style={{ width:5, height:h, backgroundColor:accent, borderRadius:3, opacity:i===0?0.5:i===2?0.75:1 }} />)}
+            <View style={{ width:32, height:32, borderRadius:16, backgroundColor: dark ? '#16a34a' : 'rgba(255,255,255,0.2)', justifyContent:'center', alignItems:'center' }}>
+                <Ionicons name="location" size={18} color={dark ? '#fff' : '#fff'} />
             </View>
-            <Text style={{ fontSize:22, fontWeight:'900', color, letterSpacing:3 }}>SPORTHUB</Text>
+            <Text style={{ fontSize:22, fontWeight:'900', color: dark ? '#1a1a2e' : '#fff', letterSpacing:1 }}>SportMap</Text>
         </View>
     );
 }
@@ -457,11 +455,12 @@ export default function AuthScreen({ onLogin, onSignup, cachedAccounts = [], onS
     // ─────────────────────────────────────────────────────────────────────────
     if (mode === 'picker') {
         return (
-            <View style={{ flex:1, backgroundColor:'#fff' }}>
+            <View style={{ flex:1 }}>
                 <StatusBar barStyle="light-content" />
-                <LinearGradient colors={['#16a34a','#15803d']} style={pk.header}>
+                <MapBackground />
+                <View style={pk.headerSafe}>
                     <LogoMark />
-                </LinearGradient>
+                </View>
 
                 <View style={pk.sheet}>
                     <Text style={pk.sheetTitle}>Log in as</Text>
@@ -519,17 +518,17 @@ export default function AuthScreen({ onLogin, onSignup, cachedAccounts = [], onS
     // ─────────────────────────────────────────────────────────────────────────
     return (
         <View style={{ flex:1 }}>
-            <SoccerField />
+            <MapBackground />
             <View style={{ flex:1, justifyContent:'flex-end' }}>
                 <Animated.View style={[s.card, { opacity:cardFade, transform:[{translateY:cardAnim}] }]}>
 
                     {/* Logo */}
                     <View style={s.logoRow}>
-                        <View style={{ flexDirection:'row', alignItems:'flex-end', gap:3 }}>
-                            {[12,20,14].map((h,i) => <View key={i} style={{ width:4, height:h, backgroundColor:'#16a34a', borderRadius:2, opacity:i===0?0.5:i===2?0.75:1 }} />)}
+                        <View style={{ width:36, height:36, borderRadius:18, backgroundColor:'#16a34a', justifyContent:'center', alignItems:'center' }}>
+                            <Ionicons name="location" size={20} color="#fff" />
                         </View>
                         <View>
-                            <Text style={s.logoText}>SPORTHUB</Text>
+                            <Text style={s.logoText}>SportMap</Text>
                             <Text style={s.logoSub}>FIND YOUR GAME</Text>
                         </View>
                     </View>
@@ -557,9 +556,9 @@ export default function AuthScreen({ onLogin, onSignup, cachedAccounts = [], onS
                         {mode === 'login' && (
                             <View>
                                 <View style={s.topRow}>
-                                    <TouchableOpacity style={s.backRow} onPress={() => switchMode(localCached ? 'picker' : 'landing')}>
+                                    <TouchableOpacity style={s.backRow} onPress={() => switchMode(localAccounts.length > 0 ? 'picker' : 'landing')}>
                                         <Ionicons name="arrow-back" size={18} color="#999" />
-                                        <Text style={s.backText}>{localCached ? 'Back' : 'Cancel'}</Text>
+                                        <Text style={s.backText}>{localAccounts.length > 0 ? 'Back' : 'Cancel'}</Text>
                                     </TouchableOpacity>
                                 </View>
                                 <Text style={s.modeTitle}>Welcome back</Text>
@@ -602,9 +601,9 @@ export default function AuthScreen({ onLogin, onSignup, cachedAccounts = [], onS
                         {mode === 'signup' && (
                             <View>
                                 <View style={s.topRow}>
-                                    <TouchableOpacity style={s.backRow} onPress={() => switchMode(localCached ? 'picker' : 'landing')}>
-                                        <Ionicons name="close" size={20} color="#999" />
-                                        <Text style={s.backText}>Cancel</Text>
+                                    <TouchableOpacity style={s.backRow} onPress={() => switchMode(localAccounts.length > 0 ? 'picker' : 'landing')}>
+                                        <Ionicons name="arrow-back" size={20} color="#999" />
+                                        <Text style={s.backText}>Back</Text>
                                     </TouchableOpacity>
                                 </View>
                                 <Text style={s.modeTitle}>Create account</Text>
@@ -650,8 +649,8 @@ export default function AuthScreen({ onLogin, onSignup, cachedAccounts = [], onS
 
 // ── Picker styles ─────────────────────────────────────────────────────────────
 const pk = StyleSheet.create({
-    header:         { paddingTop:80, paddingBottom:40, alignItems:'center' },
-    sheet:          { flex:1, backgroundColor:'#fff', borderTopLeftRadius:28, borderTopRightRadius:28, paddingTop:28, paddingHorizontal:24 },
+    headerSafe:     { paddingTop:64, paddingBottom:20, alignItems:'center' },
+    sheet:          { flex:1, backgroundColor:'#fff', borderTopLeftRadius:28, borderTopRightRadius:28, paddingTop:28, paddingHorizontal:24, marginTop:-12 },
     sheetTitle:     { fontSize:13, fontWeight:'700', color:'#bbb', textTransform:'uppercase', letterSpacing:1, marginBottom:20 },
     accountRowWrap: { flexDirection:'row', alignItems:'center' },
     accountRow:     { flex:1, flexDirection:'row', alignItems:'center', gap:16, paddingVertical:14 },
@@ -718,7 +717,7 @@ const fp = StyleSheet.create({
 const s = StyleSheet.create({
     card:           { backgroundColor:'#fff', borderTopLeftRadius:28, borderTopRightRadius:28, paddingHorizontal:26, paddingTop:24, paddingBottom:52 },
     logoRow:        { flexDirection:'row', alignItems:'center', gap:12, marginBottom:20 },
-    logoText:       { fontSize:22, fontWeight:'900', color:'#1a1a2e', letterSpacing:3 },
+    logoText:       { fontSize:22, fontWeight:'900', color:'#1a1a2e', letterSpacing:1 },
     logoSub:        { fontSize:9, fontWeight:'700', color:'#16a34a', letterSpacing:3, marginTop:2 },
     headline:       { fontSize:28, fontWeight:'900', color:'#1a1a2e', lineHeight:34, marginBottom:8 },
     sub:            { fontSize:14, color:'#999', marginBottom:24, lineHeight:20 },

@@ -1,6 +1,6 @@
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity, TouchableWithoutFeedback,
-    Image, ActivityIndicator, RefreshControl, Alert, Modal, Animated, Dimensions,
+    Image, ActivityIndicator, RefreshControl, Alert, Modal, Animated, Dimensions, Linking,
 } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -124,12 +124,10 @@ function AvatarSheet({ visible, onClose, hasPhoto, onViewPhoto, onSelectPhoto, o
     }, [visible]);
 
     const items = [
-        hasPhoto  && { icon: 'person-circle-outline', label: 'See profile picture',    sub: null,              onPress: onViewPhoto },
-        { icon: 'image-outline',          label: 'Select profile picture', sub: null,              onPress: onSelectPhoto },
-        { icon: 'happy-outline',          label: 'Edit avatar',            sub: null,              onPress: onEditAvatar },
-        hasPhoto  && { icon: 'trash-outline',         label: 'Remove photo',           sub: null,              onPress: onRemovePhoto, color: '#e94560' },
-        { icon: 'logo-instagram',         label: 'Import from Instagram',  sub: 'Coming soon',     onPress: null, color: '#f50057' },
-        { icon: 'logo-facebook',          label: 'Select from Facebook',   sub: 'Coming soon',     onPress: null, color: '#1877f2' },
+        hasPhoto  && { icon: 'person-circle-outline', label: 'See profile picture',    sub: null, onPress: onViewPhoto },
+        { icon: 'image-outline',          label: 'Select profile picture', sub: null, onPress: onSelectPhoto },
+        { icon: 'happy-outline',          label: 'Edit avatar',            sub: null, onPress: onEditAvatar },
+        hasPhoto  && { icon: 'trash-outline', label: 'Remove photo', sub: null, onPress: onRemovePhoto, color: '#e94560' },
     ].filter(Boolean);
 
     if (!visible) return null;
@@ -202,6 +200,7 @@ export default function ProfileScreen({ navigation }) {
     const [sheetOpen, setSheetOpen]   = useState(false);
     const [viewerOpen, setViewerOpen] = useState(false);
     const [recentActivity, setRecentActivity] = useState([]);
+    const [bannerUploading, setBannerUploading] = useState(false);
 
     const fetchProfile = async () => {
         try {
@@ -244,6 +243,28 @@ export default function ProfileScreen({ navigation }) {
                 if (res.ok) setUser(await res.json());
             } catch (e) { console.log('Upload error:', e); }
             finally { setUploading(false); }
+        }
+    };
+
+    const pickBanner = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow photo access.'); return; }
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true, aspect: [3, 1], quality: 0.7, base64: true,
+        });
+        if (!result.canceled && result.assets?.[0]) {
+            setBannerUploading(true);
+            try {
+                const token = await getToken();
+                const res = await fetch(`${API_URL}/users/me`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ banner_photo: `data:image/jpeg;base64,${result.assets[0].base64}` }),
+                });
+                if (res.ok) setUser(await res.json());
+            } catch (e) { console.log('Banner upload error:', e); }
+            finally { setBannerUploading(false); }
         }
     };
 
@@ -317,6 +338,7 @@ export default function ProfileScreen({ navigation }) {
                             <Text style={[styles.sportBadgeText, { color: col }]}>{sk}</Text>
                         </View>
                         {org && <View style={styles.hostBadge}><Ionicons name="star" size={10} color="#f59e0b" /><Text style={styles.hostBadgeText}>Hosting</Text></View>}
+                        {!org && <View style={styles.attendBadge}><Ionicons name="person" size={10} color="#3b82f6" /><Text style={styles.attendBadgeText}>Attending</Text></View>}
                     </View>
                     <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
                     <View style={styles.eventMeta}><Ionicons name="calendar-outline" size={12} color="#999" /><Text style={styles.eventMetaText}>{formatDate(event.start_date)} · {formatTime(event.start_time)}</Text></View>
@@ -336,7 +358,27 @@ export default function ProfileScreen({ navigation }) {
             <ScrollView style={styles.container} showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />}>
 
-                <LinearGradient colors={['#1a1a2e','#16213e','#0f3460']} style={styles.banner} />
+                {/* BANNER — tappable to upload background */}
+                <TouchableOpacity activeOpacity={0.9} onPress={pickBanner}>
+                    {user.banner_photo ? (
+                        <View style={styles.banner}>
+                            <Image source={{ uri: user.banner_photo }} style={styles.bannerImage} />
+                            <LinearGradient colors={['transparent','rgba(0,0,0,0.3)']} style={styles.bannerOverlay} />
+                            <View style={styles.bannerEditHint}>
+                                {bannerUploading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="camera-outline" size={14} color="#fff" />}
+                            </View>
+                        </View>
+                    ) : (
+                        <LinearGradient colors={['#1a1a2e','#16213e','#0f3460']} style={styles.banner}>
+                            <View style={styles.bannerEditHint}>
+                                {bannerUploading ? <ActivityIndicator size="small" color="#fff" /> : <>
+                                    <Ionicons name="image-outline" size={14} color="rgba(255,255,255,0.7)" />
+                                    <Text style={styles.bannerEditText}>Add cover photo</Text>
+                                </>}
+                            </View>
+                        </LinearGradient>
+                    )}
+                </TouchableOpacity>
 
                 {/* AVATAR — circle opens sheet, camera goes straight to picker */}
                 <View style={styles.avatarRow}>
@@ -375,42 +417,46 @@ export default function ProfileScreen({ navigation }) {
                     )}
                     {(user.instagram||user.facebook) && (
                         <View style={styles.socialRow}>
-                            {user.instagram && <View style={styles.socialPill}><Ionicons name="logo-instagram" size={14} color="#f50057" /><Text style={styles.socialPillText}>@{user.instagram}</Text></View>}
-                            {user.facebook  && <View style={styles.socialPill}><Ionicons name="logo-facebook"  size={14} color="#1877f2" /><Text style={styles.socialPillText}>{user.facebook}</Text></View>}
+                            {user.instagram && (
+                                <TouchableOpacity style={styles.socialPill} activeOpacity={0.7}
+                                    onPress={() => {
+                                        const handle = user.instagram.replace('@','');
+                                        Linking.openURL(`instagram://user?username=${handle}`).catch(() =>
+                                            Linking.openURL(`https://instagram.com/${handle}`)
+                                        );
+                                    }}>
+                                    <Ionicons name="logo-instagram" size={14} color="#f50057" />
+                                    <Text style={styles.socialPillText}>@{user.instagram}</Text>
+                                    <Ionicons name="open-outline" size={11} color="#ccc" />
+                                </TouchableOpacity>
+                            )}
+                            {user.facebook && (
+                                <TouchableOpacity style={styles.socialPill} activeOpacity={0.7}
+                                    onPress={() => {
+                                        Linking.openURL(`fb://profile/${user.facebook}`).catch(() =>
+                                            Linking.openURL(`https://facebook.com/${user.facebook}`)
+                                        );
+                                    }}>
+                                    <Ionicons name="logo-facebook" size={14} color="#1877f2" />
+                                    <Text style={styles.socialPillText}>{user.facebook}</Text>
+                                    <Ionicons name="open-outline" size={11} color="#ccc" />
+                                </TouchableOpacity>
+                            )}
                         </View>
                     )}
                 </View>
 
                 {user.bio && <View style={styles.bioSection}><Text style={styles.bio}>{user.bio}</Text></View>}
 
-                <View style={styles.statsRow}>
-                    {[['Created',stats.created],['Joined',stats.joined],['Upcoming',allUpcoming.length]].map(([label,val],i,arr)=>(
-                        <View key={label} style={{ flex:1, flexDirection:'row', alignItems:'center' }}>
-                            <View style={styles.statItem}><Text style={styles.statNum}>{val}</Text><Text style={styles.statLabel}>{label}</Text></View>
-                            {i < arr.length-1 && <View style={styles.statDiv} />}
-                        </View>
-                    ))}
-                </View>
-
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Upcoming Events</Text>
-                    {allUpcoming.length > 0 ? allUpcoming.map(renderCard) : (
-                        <View style={styles.emptyCard}>
-                            <Ionicons name="calendar-outline" size={26} color="#ddd" />
-                            <Text style={styles.emptyText}>No upcoming events</Text>
-                            <Text style={styles.emptySub}>Join or create an event to get started</Text>
-                        </View>
-                    )}
-                </View>
-
+                {/* SPORTS — prominent position */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Sports & Interests</Text>
                     {sports.length > 0 ? (
                         <View style={styles.pillsRow}>
                             {sports.map((sp,i) => (
-                                <View key={i} style={styles.pill}>
-                                    <Ionicons name={SPORT_ICONS[sp]||'tennisball-outline'} size={14} color="#16a34a" />
-                                    <Text style={styles.pillText}>{sp}</Text>
+                                <View key={i} style={[styles.pill, { backgroundColor: (SPORT_COLORS[sp] || '#16a34a') + '12' }]}>
+                                    <Ionicons name={SPORT_ICONS[sp]||'tennisball-outline'} size={15} color={SPORT_COLORS[sp] || '#16a34a'} />
+                                    <Text style={[styles.pillText, { color: SPORT_COLORS[sp] || '#16a34a' }]}>{sp}</Text>
                                 </View>
                             ))}
                         </View>
@@ -423,11 +469,33 @@ export default function ProfileScreen({ navigation }) {
                     )}
                 </View>
 
+                {/* STATS */}
+                <View style={styles.statsRow}>
+                    {[['Created',stats.created],['Joined',stats.joined],['Upcoming',allUpcoming.length]].map(([label,val],i,arr)=>(
+                        <View key={label} style={{ flex:1, flexDirection:'row', alignItems:'center' }}>
+                            <View style={styles.statItem}><Text style={styles.statNum}>{val}</Text><Text style={styles.statLabel}>{label}</Text></View>
+                            {i < arr.length-1 && <View style={styles.statDiv} />}
+                        </View>
+                    ))}
+                </View>
+
+                {/* UPCOMING EVENTS */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Upcoming Events</Text>
+                    {allUpcoming.length > 0 ? allUpcoming.map(renderCard) : (
+                        <View style={styles.emptyCard}>
+                            <Ionicons name="calendar-outline" size={26} color="#ddd" />
+                            <Text style={styles.emptyText}>No upcoming events</Text>
+                            <Text style={styles.emptySub}>Join or create an event to get started</Text>
+                        </View>
+                    )}
+                </View>
+
 
                 {/* ── RECENT ACTIVITY ── */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Recent Activity</Text>
-                    {recentActivity.length > 0 ? recentActivity.map(act => {
+                    {recentActivity.length > 0 ? recentActivity.slice(0, 5).map(act => {
                         const sk = cap(act.sport);
                         const col = SPORT_COLORS[sk] || '#16a34a';
                         const ico = SPORT_ICONS[sk] || 'trophy-outline';
@@ -502,7 +570,11 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
     container:       { flex: 1, backgroundColor: '#f8f9fb' },
     centered:        { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fb' },
-    banner:          { height: 160 },
+    banner:          { height: 260, overflow: 'hidden' },
+    bannerImage:     { width: '100%', height: '100%', resizeMode: 'cover' },
+    bannerOverlay:   { ...StyleSheet.absoluteFillObject },
+    bannerEditHint:  { position: 'absolute', bottom: 10, right: 14, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
+    bannerEditText:  { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
     avatarRow:       { alignSelf: 'center', marginTop: -57, marginBottom: 12 },
     avatarRing:      { width: 110, height: 110, borderRadius: 55, borderWidth: 4, borderColor: '#fff', backgroundColor: '#f0f0f0', overflow: 'hidden', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
     avatarInner:     { width: 102, height: 102, borderRadius: 51, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f0f0' },
@@ -534,13 +606,15 @@ const styles = StyleSheet.create({
     sportBadgeText:  { fontSize: 11, fontWeight: '700' },
     hostBadge:       { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#fffbeb', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#fde68a' },
     hostBadgeText:   { fontSize: 11, fontWeight: '700', color: '#f59e0b' },
+    attendBadge:     { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#eff6ff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#bfdbfe' },
+    attendBadgeText: { fontSize: 11, fontWeight: '700', color: '#3b82f6' },
     eventTitle:      { fontSize: 15, fontWeight: '700', color: '#1a1a2e', marginBottom: 6 },
     eventMeta:       { flexDirection: 'row', alignItems: 'center', gap: 5 },
     eventMetaText:   { fontSize: 12, color: '#999' },
     deleteBtn:       { padding: 16 },
     pillsRow:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    pill:            { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
-    pillText:        { fontSize: 13, color: '#1a1a2e', fontWeight: '600' },
+    pill:            { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
+    pillText:        { fontSize: 13, fontWeight: '700' },
     emptyCard:       { alignItems: 'center', paddingVertical: 28, backgroundColor: '#fff', borderRadius: 16, gap: 6 },
     emptyText:       { fontSize: 14, fontWeight: '600', color: '#ccc' },
     emptySub:        { fontSize: 12, color: '#ddd' },

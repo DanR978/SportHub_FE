@@ -94,7 +94,7 @@ export default function DeleteSurveyScreen({ navigation, route }) {
                                 <Ionicons name="help-circle-outline" size={40} color="#e94560" />
                             </View>
                             <Text style={s.title}>Why are you leaving?</Text>
-                            <Text style={s.sub}>Your feedback helps us improve SportHub for everyone.</Text>
+                            <Text style={s.sub}>Your feedback helps us improve SportMap for everyone.</Text>
                             <View style={s.reasonList}>
                                 {REASONS.map(r => (
                                     <TouchableOpacity

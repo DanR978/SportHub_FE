@@ -2,12 +2,14 @@ import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
     TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Modal, Dimensions,
 } from 'react-native';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MapView, { Marker } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { getToken } from '../services/auth';
 import { API_URL, GOOGLE_MAPS_API_KEY } from '../config';
+import { useToast } from './Toast';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -95,6 +97,7 @@ function IOSPickerModal({ visible, onClose, onConfirm, children }) {
 }
 
 export default function CreateEventScreen({ navigation }) {
+    const toast = useToast();
     const [title, setTitle]             = useState('');
     const [sport, setSport]             = useState('');
     const [level, setLevel]             = useState('');
@@ -118,6 +121,22 @@ export default function CreateEventScreen({ navigation }) {
     const [mapModalVisible, setMapModalVisible] = useState(false);
     const [tempPin, setTempPin] = useState(null); // temp pin while modal is open
 
+    // User's current location (for centering map)
+    const [userLocation, setUserLocation] = useState(null);
+
+    // Request location on mount
+    useEffect(() => {
+        (async () => {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status === 'granted') {
+                try {
+                    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                    setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+                } catch (e) { console.log('Location error:', e); }
+            }
+        })();
+    }, []);
+
     // Temp values for pickers
     const [tempDate, setTempDate]           = useState(new Date());
     const [tempStartTime, setTempStartTime] = useState(new Date());
@@ -139,35 +158,48 @@ export default function CreateEventScreen({ navigation }) {
         if (!text || text.length < 3) { setSuggestions([]); setShowSuggestions(false); return; }
         debounceRef.current = setTimeout(async () => {
             try {
-                const res = await fetch(
-                    `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(text)}&key=${GOOGLE_MAPS_API_KEY}`
-                );
+                let url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(text)}&key=${GOOGLE_MAPS_API_KEY}`;
+                // Bias results toward user's location if available
+                if (userLocation) {
+                    url += `&location=${userLocation.latitude},${userLocation.longitude}&radius=32000`;
+                }
+                const res = await fetch(url);
                 const data = await res.json();
-                if (data.results?.length) {
-                    setSuggestions(data.results.slice(0, 4).map(r => ({
-                        place_id: r.place_id,
-                        structured_formatting: {
-                            main_text: r.formatted_address.split(',')[0],
-                            secondary_text: r.formatted_address.split(',').slice(1).join(',').trim(),
-                        },
-                        lat: r.geometry.location.lat,
-                        lng: r.geometry.location.lng,
+                if (data.predictions?.length) {
+                    setSuggestions(data.predictions.slice(0, 5).map(p => ({
+                        place_id: p.place_id,
+                        structured_formatting: p.structured_formatting,
+                        description: p.description,
                     })));
                     setShowSuggestions(true);
                 } else { setSuggestions([]); setShowSuggestions(false); }
             } catch { setSuggestions([]); setShowSuggestions(false); }
-        }, 400);
-    }, []);
+        }, 350);
+    }, [userLocation]);
 
     const selectSuggestion = async (s) => {
-        setSearch(s.structured_formatting?.main_text || '');
+        const name = s.structured_formatting?.main_text || s.description || '';
+        setLocation(name);
         setSuggestions([]); setShowSuggestions(false);
-        if (s.lat && s.lng && view === 'map' && mapRef.current) {
-            mapRef.current.animateToRegion({
-                latitude: s.lat, longitude: s.lng,
-                latitudeDelta: 0.05, longitudeDelta: 0.05,
-            }, 600);
+
+        // Look up the lat/lng for this place using Place Details
+        if (s.place_id) {
+            try {
+                const res = await fetch(
+                    `https://maps.googleapis.com/maps/api/place/details/json?place_id=${s.place_id}&fields=geometry,formatted_address&key=${GOOGLE_MAPS_API_KEY}`
+                );
+                const data = await res.json();
+                if (data.result?.geometry?.location) {
+                    const { lat, lng } = data.result.geometry.location;
+                    setPinCoords({ latitude: lat, longitude: lng });
+                    // Use the formatted address if the main_text was very short
+                    if (name.length < 8 && data.result.formatted_address) {
+                        setLocation(data.result.formatted_address);
+                    }
+                }
+            } catch (e) { console.log('Place details error:', e); }
         }
+        setErrors(e => ({ ...e, location: null }));
     };
 
     const handleLocationChange = (text) => {
@@ -233,8 +265,8 @@ export default function CreateEventScreen({ navigation }) {
         if (!location.trim() && !pinCoords) e.location = 'Enter an address or drop a pin';
         if (startTime && endTime) {
             const diff = (endTime - startTime) / (1000 * 60 * 60);
-            const adjusted = diff < 0 ? diff + 24 : diff;
-            if (adjusted > 6) e.endTime = 'Events cannot last more than 6 hours';
+            if (diff <= 0) e.endTime = 'End time must be after start time';
+            else if (diff > 4) e.endTime = 'Events cannot last more than 4 hours';
         }
         const mp = parseInt(maxPlayers);
         if (!maxPlayers || isNaN(mp) || mp < 2 || mp > 100) e.maxPlayers = 'Must be between 2 and 100';
@@ -257,6 +289,7 @@ export default function CreateEventScreen({ navigation }) {
         setErrors({});
         try {
             const token = await getToken();
+            const locationText = location.trim() || (pinCoords ? 'Pinned location' : '');
             const body = {
                 title:            title.trim(),
                 sport:            sport.toLowerCase(),
@@ -264,7 +297,7 @@ export default function CreateEventScreen({ navigation }) {
                 start_date:       toDateString(date),
                 start_time:       toTimeString(startTime),
                 end_time:         endTime ? toTimeString(endTime) : null,
-                location:         location.trim(),
+                location:         locationText,
                 max_players:      parseInt(maxPlayers),
                 cost:             parseFloat(cost) || 0,
                 description:      description.trim() || null,
@@ -279,14 +312,19 @@ export default function CreateEventScreen({ navigation }) {
             });
 
             if (res.ok) {
-                navigation.goBack();
+                const newEvent = await res.json();
+                toast.success('Event created!');
+                navigation.replace('EventDetail', { eventId: newEvent.event_id });
+            } else if (res.status === 403) {
+                setStep(3);
+                navigation.navigate('Premium', { fromCreate: true });
             } else {
                 const err = await res.json();
-                setErrors({ submit: err.detail || 'Something went wrong' });
+                toast.error(err.detail || 'Something went wrong');
                 setStep(3);
             }
         } catch (e) {
-            setErrors({ submit: 'Network error. Please try again.' });
+            toast.error('Network error. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -669,12 +707,13 @@ export default function CreateEventScreen({ navigation }) {
                     <MapView
                         style={{ flex: 1 }}
                         initialRegion={{
-                            latitude: pinCoords?.latitude || 37.78,
-                            longitude: pinCoords?.longitude || -122.42,
-                            latitudeDelta: 0.02,
-                            longitudeDelta: 0.02,
+                            latitude: pinCoords?.latitude || userLocation?.latitude || 38.9072,
+                            longitude: pinCoords?.longitude || userLocation?.longitude || -77.0369,
+                            latitudeDelta: 0.08,
+                            longitudeDelta: 0.08,
                         }}
                         showsUserLocation
+                        showsMyLocationButton
                         customMapStyle={CLEAN_MAP_STYLE}
                         onPress={handleMapPress}
                         onLongPress={handleMapPress}

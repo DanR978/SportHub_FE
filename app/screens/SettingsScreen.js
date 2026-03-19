@@ -104,14 +104,14 @@ export default function SettingsScreen({ navigation }) {
                         ))}
                     </View>
                 ))}
-                <Text style={s.version}>SportHub v1.0.0</Text>
+                <Text style={s.version}>SportMap v1.0.0</Text>
                 <View style={{ height: 40 }} />
             </ScrollView>
 
             {/* ── Privacy Modal ── */}
             <InfoModal visible={privacyVisible} onClose={() => setPrivacyVisible(false)} title="Privacy">
-                <SectionText title="Profile Visibility" body="Your profile is visible to other SportHub users. Your email is never shared publicly. Only your first name, avatar, sports, and bio are visible to other players." />
-                <SectionText title="Location Data" body="SportHub uses your location to show nearby events. Your exact location is never stored on our servers — only the approximate area is used for proximity filtering." />
+                <SectionText title="Profile Visibility" body="Your profile is visible to other SportMap users. Your email is never shared publicly. Only your first name, avatar, sports, and bio are visible to other players." />
+                <SectionText title="Location Data" body="SportMap uses your location to show nearby events. Your exact location is never stored on our servers — only the approximate area is used for proximity filtering." />
                 <SectionText title="Event Participation" body="When you join an event, the organizer and other participants can see your name and avatar. You can leave an event at any time to remove yourself from the participant list." />
                 <SectionText title="Data You Can Control" body="You can edit or delete your profile information at any time from the Edit Profile screen. Deleting your account permanently removes all your data from our servers." />
             </InfoModal>
@@ -155,11 +155,11 @@ export default function SettingsScreen({ navigation }) {
 
             {/* ── Terms of Service Modal ── */}
             <InfoModal visible={termsVisible} onClose={() => setTermsVisible(false)} title="Terms of Service">
-                <SectionText title="1. Acceptance of Terms" body="By using SportHub, you agree to these Terms of Service. If you do not agree, please do not use the app." />
+                <SectionText title="1. Acceptance of Terms" body="By using SportMap, you agree to these Terms of Service. If you do not agree, please do not use the app." />
                 <SectionText title="2. User Accounts" body="You must provide accurate information when creating an account. You are responsible for maintaining the security of your account and all activity under it." />
-                <SectionText title="3. User Conduct" body="You agree not to use SportHub to post offensive content, harass other users, or create fraudulent events. We reserve the right to remove content or suspend accounts that violate these terms." />
-                <SectionText title="4. Events & Safety" body="SportHub is a platform for organizing sports events. We do not guarantee the safety of any event. Users participate at their own risk and should exercise personal judgment." />
-                <SectionText title="5. Content" body="You retain ownership of content you post. By posting content on SportHub, you grant us a license to display it within the app for the purpose of providing our service." />
+                <SectionText title="3. User Conduct" body="You agree not to use SportMap to post offensive content, harass other users, or create fraudulent events. We reserve the right to remove content or suspend accounts that violate these terms." />
+                <SectionText title="4. Events & Safety" body="SportMap is a platform for organizing sports events. We do not guarantee the safety of any event. Users participate at their own risk and should exercise personal judgment." />
+                <SectionText title="5. Content" body="You retain ownership of content you post. By posting content on SportMap, you grant us a license to display it within the app for the purpose of providing our service." />
                 <SectionText title="6. Termination" body="We may suspend or terminate your access at any time for violation of these terms. You may delete your account at any time through the Settings screen." />
                 <SectionText title="7. Changes" body="We may update these terms from time to time. Continued use of the app after changes constitutes acceptance of the new terms." />
                 <Text style={s.lastUpdated}>Last updated: March 2026</Text>
@@ -168,8 +168,8 @@ export default function SettingsScreen({ navigation }) {
             {/* ── Privacy Policy Modal ── */}
             <InfoModal visible={policyVisible} onClose={() => setPolicyVisible(false)} title="Privacy Policy">
                 <SectionText title="Information We Collect" body="We collect the information you provide when creating an account (name, email, date of birth, nationality) and event data you create or join. We also collect approximate location data when you use the map features." />
-                <SectionText title="How We Use Your Information" body="Your information is used to provide the SportHub service: displaying your profile to other users, showing nearby events, and sending notifications about events you've joined." />
-                <SectionText title="Data Sharing" body="We do not sell your personal data. Your profile information (name, avatar, sports) is visible to other SportHub users. We may share anonymized, aggregate data for analytics purposes." />
+                <SectionText title="How We Use Your Information" body="Your information is used to provide the SportMap service: displaying your profile to other users, showing nearby events, and sending notifications about events you've joined." />
+                <SectionText title="Data Sharing" body="We do not sell your personal data. Your profile information (name, avatar, sports) is visible to other SportMap users. We may share anonymized, aggregate data for analytics purposes." />
                 <SectionText title="Data Storage" body="Your data is stored securely on encrypted servers. Authentication tokens are stored locally on your device using secure storage." />
                 <SectionText title="Your Rights" body="You can access, edit, or delete your personal data at any time through the app. Deleting your account removes all your data from our servers." />
                 <SectionText title="Contact" body="For privacy-related questions, contact privacy@sportmap.app." />

@@ -16,12 +16,16 @@ import CreateEventScreen from './app/screens/CreateEventScreen';
 import EditProfileScreen from './app/screens/EditProfileScreen';
 import EditAvatarScreen from './app/screens/EditAvatarScreen';
 import DeleteSurveyScreen from './app/screens/DeleteSurveyScreen';
+import HostProfileScreen from './app/screens/HostProfileScreen';
+import PremiumScreen from './app/screens/PremiumScreen';
 import RatingPopup from './app/screens/RatingPopup';
+import { ToastProvider } from './app/screens/Toast';
 
 import {
     getToken, saveToken, removeToken, getAuthMethod,
     saveUserCache, clearUserCache,
     getTokenForEmail, getCachedAccounts,
+    verifyCachedToken, removeTokenForEmail,
 } from './app/services/auth';
 import { API_URL } from './app/config';
 
@@ -69,6 +73,8 @@ function AppNavigator() {
             <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="EditAvatar" component={EditAvatarScreen} options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="DeleteSurvey" component={DeleteSurveyScreen} options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="HostProfile" component={HostProfileScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Premium" component={PremiumScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         </Stack.Navigator>
     );
 }
@@ -169,16 +175,36 @@ export default function App() {
         }
     };
 
-    const handleLogin = () => checkAuth();
+    const handleLogin = () => { setPrefillEmail(''); checkAuth(); };
+
+    const [prefillEmail, setPrefillEmail] = useState('');
 
     const handleSwitchToAccount = async (email) => {
         const token = await getTokenForEmail(email);
         if (token) {
-            await saveToken(token);
-            checkAuth();
-        } else {
-            checkAuth();
+            // Verify the cached token is still valid
+            const user = await verifyCachedToken(token);
+            if (user) {
+                await saveToken(token);
+                await saveUserCache(user, token);
+                if (!user.date_of_birth || !user.nationality || !user.first_name) {
+                    const method = await getAuthMethod();
+                    setSetupInfo({ authMethod: method || 'email', socialUser: user });
+                    transition('setup');
+                } else {
+                    transition('app', 450);
+                    checkPendingRatings();
+                }
+                return;
+            }
+            // Token expired — clear it from cache
+            await removeTokenForEmail(email);
         }
+        // No valid token — go to login with email prefilled
+        setPrefillEmail(email);
+        const cached = await getCachedAccounts();
+        setCachedUsers(cached || []);
+        transition('auth');
     };
 
     const handleSignup = (authMethod, socialUser) => {
@@ -213,6 +239,7 @@ export default function App() {
     };
 
     const handleLogout = async () => {
+        await removeToken();
         const cached = await getCachedAccounts();
         setCachedUsers(cached || []);
         transition('auth', 400);
@@ -237,42 +264,44 @@ export default function App() {
     appCallbacks.onDeactivated = handleDeactivated;
 
     return (
-        <Animated.View style={{ flex: 1, opacity: crossFade }}>
-            {state === 'welcome' && <WelcomeScreen onFinish={checkAuth} />}
-            {state === 'loading' && (
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#060610' }}>
-                    <ActivityIndicator size="large" color="#16a34a" />
-                </View>
-            )}
-            {state === 'auth' && (
-                <AuthScreen
-                    onLogin={handleLogin}
-                    onSignup={handleSignup}
-                    cachedAccounts={cachedUsers}
-                    onSwitchToAccount={handleSwitchToAccount}
-                    onQuickLogin={handleLogin}
-                />
-            )}
-            {state === 'setup' && (
-                <SetupScreen
-                    onComplete={handleSetupComplete}
-                    authMethod={setupInfo.authMethod}
-                    socialUser={setupInfo.socialUser}
-                />
-            )}
-            {state === 'app' && (
-                <NavigationContainer>
-                    <AppNavigator />
-                </NavigationContainer>
-            )}
+        <ToastProvider>
+            <Animated.View style={{ flex: 1, opacity: crossFade }}>
+                {state === 'welcome' && <WelcomeScreen onFinish={checkAuth} />}
+                {state === 'loading' && (
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#060610' }}>
+                        <ActivityIndicator size="large" color="#16a34a" />
+                    </View>
+                )}
+                {state === 'auth' && (
+                    <AuthScreen
+                        onLogin={handleLogin}
+                        onSignup={handleSignup}
+                        cachedAccounts={cachedUsers}
+                        onSwitchToAccount={handleSwitchToAccount}
+                        onQuickLogin={handleLogin}
+                        prefillEmail={prefillEmail}
+                    />
+                )}
+                {state === 'setup' && (
+                    <SetupScreen
+                        onComplete={handleSetupComplete}
+                        authMethod={setupInfo.authMethod}
+                        socialUser={setupInfo.socialUser}
+                    />
+                )}
+                {state === 'app' && (
+                    <NavigationContainer>
+                        <AppNavigator />
+                    </NavigationContainer>
+                )}
 
-            {/* Rating popup — shows after login if there are unrated past events */}
-            <RatingPopup
-                visible={ratingPopupVisible}
-                event={currentRatingEvent}
-                onClose={() => setRatingPopupVisible(false)}
-                onRated={handleRated}
-            />
-        </Animated.View>
+                <RatingPopup
+                    visible={ratingPopupVisible}
+                    event={currentRatingEvent}
+                    onClose={() => setRatingPopupVisible(false)}
+                    onRated={handleRated}
+                />
+            </Animated.View>
+        </ToastProvider>
     );
 }

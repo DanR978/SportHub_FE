@@ -1,6 +1,6 @@
 import {
     View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList,
-    Modal, ScrollView, RefreshControl, Dimensions,
+    Modal, ScrollView, RefreshControl, Dimensions, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -9,8 +9,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { getToken } from '../services/auth';
 import { API_URL, GOOGLE_MAPS_API_KEY } from '../config';
+import AdBanner, { AdBannerInline } from './AdBanner';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -105,6 +107,15 @@ export default function EventsScreen({ navigation }) {
     const [tempSports, setTempSports] = useState([]);
     const [tempLevels, setTempLevels] = useState([]);
     const [tempPrices, setTempPrices] = useState([]);
+
+    // Date range filter
+    const [selectedDateFrom, setSelectedDateFrom] = useState(null);
+    const [selectedDateTo, setSelectedDateTo] = useState(null);
+    const [tempDateFrom, setTempDateFrom] = useState(null);
+    const [tempDateTo, setTempDateTo] = useState(null);
+    const [showFromPicker, setShowFromPicker] = useState(false);
+    const [showToPicker, setShowToPicker] = useState(false);
+    // Quick chip
     const [selectedMapEvent, setSelectedMapEvent] = useState(null);
     const [locationReady, setLocationReady] = useState(false);
     const mapRef = useRef(null);
@@ -113,6 +124,13 @@ export default function EventsScreen({ navigation }) {
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const debounceRef = useRef(null);
+
+    // ── Date filter helpers ─────────────────────────────────────
+    const pad2 = n => String(n).padStart(2, '0');
+    const fmtDate = d => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+    const fmtDateDisplay = d => d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+
+    const today = new Date(); today.setHours(0,0,0,0);
 
     // ── Archive expired events then fetch fresh list ─────────────
     const archiveThenFetch = useCallback(async (filters = {}) => {
@@ -126,7 +144,7 @@ export default function EventsScreen({ navigation }) {
             }).catch(() => {});
 
             // Now fetch fresh events
-            const hasFilters = filters.sports?.length || filters.levels?.length;
+            const hasFilters = filters.sports?.length || filters.levels?.length || filters.dateFrom;
             let url;
             if (hasFilters || userLocation) {
                 const params = new URLSearchParams();
@@ -137,6 +155,11 @@ export default function EventsScreen({ navigation }) {
                 }
                 filters.sports?.forEach(s => params.append('sports', s.toLowerCase()));
                 filters.levels?.forEach(l => params.append('experience_levels', l.toLowerCase()));
+                // Date range
+                if (filters.dateFrom) {
+                    params.append('start_from', fmtDate(filters.dateFrom));
+                    if (filters.dateTo) params.append('date_to', fmtDate(filters.dateTo));
+                }
                 url = `${API_URL}/sports-events/filter?${params.toString()}`;
             } else {
                 url = `${API_URL}/sports-events`;
@@ -163,26 +186,33 @@ export default function EventsScreen({ navigation }) {
         })();
     }, []);
 
+    // Helper to build current filter args
+    const buildFilterArgs = (overrides = {}) => ({
+        sports: overrides.sports ?? selectedSports,
+        levels: overrides.levels ?? selectedLevels,
+        dateFrom: overrides.dateFrom ?? selectedDateFrom,
+        dateTo: overrides.dateTo ?? selectedDateTo,
+    });
+
     // Fetch once location is ready
     useEffect(() => {
-        if (locationReady) archiveThenFetch({ sports: selectedSports, levels: selectedLevels });
+        if (locationReady) archiveThenFetch(buildFilterArgs());
     }, [locationReady]);
 
     // ── Auto-refresh every time screen comes into focus ──────────
-    // This makes events update after creating, joining, deleting, etc.
     useFocusEffect(
         useCallback(() => {
             if (locationReady) {
-                archiveThenFetch({ sports: selectedSports, levels: selectedLevels });
+                archiveThenFetch(buildFilterArgs());
             }
-        }, [locationReady, selectedSports, selectedLevels, userLocation])
+        }, [locationReady, selectedSports, selectedLevels, selectedDateFrom, selectedDateTo, userLocation])
     );
 
     // ── Pull to refresh ──────────────────────────────────────────
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        archiveThenFetch({ sports: selectedSports, levels: selectedLevels });
-    }, [selectedSports, selectedLevels, userLocation]);
+        archiveThenFetch(buildFilterArgs());
+    }, [selectedSports, selectedLevels, selectedDateFrom, selectedDateTo, userLocation]);
 
     // ── Join / Leave ─────────────────────────────────────────────
     const joinEvent = async (eventId) => {
@@ -210,12 +240,27 @@ export default function EventsScreen({ navigation }) {
     };
 
     // ── Filters ──────────────────────────────────────────────────
-    const openFilter = () => { setTempSports([...selectedSports]); setTempLevels([...selectedLevels]); setTempPrices([...selectedPrices]); setFilterVisible(true); };
-    const applyFilters = () => { setSelectedSports([...tempSports]); setSelectedLevels([...tempLevels]); setSelectedPrices([...tempPrices]); setFilterVisible(false); archiveThenFetch({ sports: tempSports, levels: tempLevels }); };
-    const clearFilters = () => { setTempSports([]); setTempLevels([]); setTempPrices([]); };
+    const openFilter = () => {
+        setTempSports([...selectedSports]); setTempLevels([...selectedLevels]); setTempPrices([...selectedPrices]);
+        setTempDateFrom(selectedDateFrom); setTempDateTo(selectedDateTo);
+        setShowFromPicker(false); setShowToPicker(false);
+        setFilterVisible(true);
+    };
+    const applyFilters = () => {
+        setSelectedSports([...tempSports]); setSelectedLevels([...tempLevels]); setSelectedPrices([...tempPrices]);
+        setSelectedDateFrom(tempDateFrom); setSelectedDateTo(tempDateTo);
+        setFilterVisible(false);
+        archiveThenFetch({ sports: tempSports, levels: tempLevels, dateFrom: tempDateFrom, dateTo: tempDateTo });
+    };
+    const clearFilters = () => {
+        setTempSports([]); setTempLevels([]); setTempPrices([]);
+        setTempDateFrom(null); setTempDateTo(null);
+        setShowFromPicker(false); setShowToPicker(false);
+    };
     const toggle = (list, setList, value) => setList(list.includes(value) ? list.filter(v => v !== value) : [...list, value]);
 
-    const activeFilterCount = selectedSports.length + selectedLevels.length + selectedPrices.length;
+    const hasDateFilter = selectedDateFrom;
+    const activeFilterCount = selectedSports.length + selectedLevels.length + selectedPrices.length + (hasDateFilter ? 1 : 0);
     const filtered = events.filter(e => {
         const matchSearch = e.title.toLowerCase().includes(search.toLowerCase()) || e.location.toLowerCase().includes(search.toLowerCase());
         const matchPrice = selectedPrices.length === 0 || (selectedPrices.includes('Free') && (e.cost === 0 || e.cost === null)) || (selectedPrices.includes('Paid') && e.cost > 0);
@@ -462,7 +507,14 @@ export default function EventsScreen({ navigation }) {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={[styles.listContent, filtered.length === 0 && styles.emptyList]}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />}
-                    renderItem={({ item }) => renderListCard(item)}
+                    renderItem={({ item, index }) => (
+                        <>
+                            {renderListCard(item)}
+                            {(index + 1) % 5 === 0 && index < filtered.length - 1 && (
+                                <AdBannerInline key={`ad-${index}`} />
+                            )}
+                        </>
+                    )}
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
                             <Ionicons name="calendar-outline" size={48} color="#ddd" />
@@ -473,26 +525,104 @@ export default function EventsScreen({ navigation }) {
                 />
             )}
 
-            {/* Filter Modal */}
-            <Modal visible={filterVisible} animationType="slide" transparent>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalSheet}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Filter Events</Text>
-                            <TouchableOpacity onPress={() => setFilterVisible(false)}><Ionicons name="close" size={24} color="#1a1a2e" /></TouchableOpacity>
+            {/* Filter Modal — pageSheet per Apple HIG */}
+            <Modal visible={filterVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setFilterVisible(false)}>
+                <View style={styles.filterContainer}>
+                    <View style={styles.filterHeader}>
+                        <TouchableOpacity onPress={() => setFilterVisible(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                            <Text style={styles.filterCancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.filterHeaderTitle}>Filter Events</Text>
+                        <TouchableOpacity onPress={applyFilters} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                            <Text style={styles.filterApplyText}>Apply</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <ScrollView style={styles.filterBody} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+                        {/* DATE RANGE */}
+                        <Text style={styles.filterSection}>Date range</Text>
+                        <View style={styles.dateRangeRow}>
+                            <TouchableOpacity style={[styles.datePickerBtn, tempDateFrom && styles.datePickerBtnActive]}
+                                onPress={() => { setShowFromPicker(!showFromPicker); setShowToPicker(false); }}>
+                                <Ionicons name="calendar-outline" size={16} color={tempDateFrom ? '#16a34a' : '#999'} />
+                                <Text style={[styles.datePickerBtnText, tempDateFrom && { color: '#1a1a2e' }]}>
+                                    {tempDateFrom ? fmtDateDisplay(tempDateFrom) : 'From date'}
+                                </Text>
+                                {tempDateFrom && (
+                                    <TouchableOpacity onPress={() => { setTempDateFrom(null); setShowFromPicker(false); }} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+                                        <Ionicons name="close-circle" size={16} color="#ccc" />
+                                    </TouchableOpacity>
+                                )}
+                            </TouchableOpacity>
+                            <Ionicons name="arrow-forward" size={14} color="#ccc" />
+                            <TouchableOpacity style={[styles.datePickerBtn, tempDateTo && styles.datePickerBtnActive]}
+                                onPress={() => { setShowToPicker(!showToPicker); setShowFromPicker(false); }}>
+                                <Ionicons name="calendar-outline" size={16} color={tempDateTo ? '#16a34a' : '#999'} />
+                                <Text style={[styles.datePickerBtnText, tempDateTo && { color: '#1a1a2e' }]}>
+                                    {tempDateTo ? fmtDateDisplay(tempDateTo) : 'To date'}
+                                </Text>
+                                {tempDateTo && (
+                                    <TouchableOpacity onPress={() => { setTempDateTo(null); setShowToPicker(false); }} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+                                        <Ionicons name="close-circle" size={16} color="#ccc" />
+                                    </TouchableOpacity>
+                                )}
+                            </TouchableOpacity>
                         </View>
-                        <ScrollView showsVerticalScrollIndicator={false}>
-                            <Text style={styles.filterSection}>Sport</Text>
-                            {ALL_SPORTS.map(sport => <CheckItem key={sport} label={sport} checked={tempSports.includes(sport)} onPress={() => toggle(tempSports, setTempSports, sport)} />)}
-                            <Text style={styles.filterSection}>Experience Level</Text>
-                            {ALL_LEVELS.map(level => <CheckItem key={level} label={level} checked={tempLevels.includes(level)} onPress={() => toggle(tempLevels, setTempLevels, level)} />)}
-                            <Text style={styles.filterSection}>Price</Text>
-                            {ALL_PRICES.map(price => <CheckItem key={price} label={price} checked={tempPrices.includes(price)} onPress={() => toggle(tempPrices, setTempPrices, price)} />)}
-                        </ScrollView>
-                        <View style={styles.modalButtons}>
-                            <TouchableOpacity style={styles.clearBtn} onPress={clearFilters}><Text style={styles.clearBtnText}>Clear All</Text></TouchableOpacity>
-                            <TouchableOpacity style={styles.applyBtn} onPress={applyFilters}><Text style={styles.applyBtnText}>Apply Filters</Text></TouchableOpacity>
-                        </View>
+                        {showFromPicker && (
+                            <View style={styles.inlinePicker}>
+                                <DateTimePicker
+                                    value={tempDateFrom || today}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                                    minimumDate={today}
+                                    onChange={(_, d) => { if (d) { setTempDateFrom(d); if (tempDateTo && d > tempDateTo) setTempDateTo(null); } if (Platform.OS === 'android') setShowFromPicker(false); }}
+                                    style={Platform.OS === 'ios' ? { alignSelf: 'center' } : {}}
+                                />
+                                {Platform.OS === 'ios' && (
+                                    <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowFromPicker(false)}>
+                                        <Text style={styles.pickerDoneText}>Done</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
+                        {showToPicker && (
+                            <View style={styles.inlinePicker}>
+                                <DateTimePicker
+                                    value={tempDateTo || tempDateFrom || today}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                                    minimumDate={tempDateFrom || today}
+                                    onChange={(_, d) => { if (d) setTempDateTo(d); if (Platform.OS === 'android') setShowToPicker(false); }}
+                                    style={Platform.OS === 'ios' ? { alignSelf: 'center' } : {}}
+                                />
+                                {Platform.OS === 'ios' && (
+                                    <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowToPicker(false)}>
+                                        <Text style={styles.pickerDoneText}>Done</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
+
+                        {/* SPORT */}
+                        <Text style={styles.filterSection}>Sport</Text>
+                        {ALL_SPORTS.map(sport => <CheckItem key={sport} label={sport} checked={tempSports.includes(sport)} onPress={() => toggle(tempSports, setTempSports, sport)} />)}
+
+                        {/* LEVEL */}
+                        <Text style={styles.filterSection}>Experience Level</Text>
+                        {ALL_LEVELS.map(level => <CheckItem key={level} label={level} checked={tempLevels.includes(level)} onPress={() => toggle(tempLevels, setTempLevels, level)} />)}
+
+                        {/* PRICE */}
+                        <Text style={styles.filterSection}>Price</Text>
+                        {ALL_PRICES.map(price => <CheckItem key={price} label={price} checked={tempPrices.includes(price)} onPress={() => toggle(tempPrices, setTempPrices, price)} />)}
+                    </ScrollView>
+
+                    {/* Bottom bar */}
+                    <View style={styles.filterBottomBar}>
+                        <TouchableOpacity style={styles.clearBtn} onPress={clearFilters}>
+                            <Text style={styles.clearBtnText}>Clear All</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.applyBtn} onPress={applyFilters}>
+                            <Text style={styles.applyBtnText}>Apply Filters</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
@@ -590,17 +720,26 @@ const styles = StyleSheet.create({
     // Map
     mapMarker:          { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
     mapEventCard:       { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#fff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 6 },
-    // Filter modal
-    modalOverlay:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-    modalSheet:         { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '80%' },
-    modalHeader:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-    modalTitle:         { fontSize: 20, fontWeight: '800', color: '#1a1a2e' },
+    // Filter modal — pageSheet
+    filterContainer:    { flex: 1, backgroundColor: '#f8f9fb' },
+    filterHeader:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 30, paddingHorizontal: 20, paddingBottom: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+    filterCancelText:   { fontSize: 16, color: '#999', fontWeight: '600' },
+    filterHeaderTitle:  { fontSize: 17, fontWeight: '800', color: '#1a1a2e' },
+    filterApplyText:    { fontSize: 16, color: '#16a34a', fontWeight: '800' },
+    filterBody:         { flex: 1, paddingHorizontal: 20 },
+    filterBottomBar:    { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 34, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f0f0f0' },
     filterSection:      { fontSize: 13, fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: 1, marginTop: 20, marginBottom: 10 },
+    dateRangeRow:       { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    datePickerBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f8f9fb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, borderWidth: 1.5, borderColor: '#f0f0f0' },
+    datePickerBtnActive:{ borderColor: '#16a34a', backgroundColor: '#f0fdf4' },
+    datePickerBtnText:  { fontSize: 13, fontWeight: '500', color: '#bbb', flex: 1 },
+    inlinePicker:       { backgroundColor: '#f8f9fb', borderRadius: 12, marginTop: 10, paddingBottom: 8, overflow: 'hidden' },
+    pickerDoneBtn:      { alignSelf: 'flex-end', paddingHorizontal: 16, paddingVertical: 8 },
+    pickerDoneText:     { fontSize: 15, fontWeight: '700', color: '#16a34a' },
     checkItem:          { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
     checkbox:           { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#ddd', marginRight: 12, justifyContent: 'center', alignItems: 'center' },
     checkboxChecked:    { backgroundColor: '#1a1a2e', borderColor: '#1a1a2e' },
     checkLabel:         { fontSize: 15, color: '#1a1a2e', fontWeight: '500' },
-    modalButtons:       { flexDirection: 'row', gap: 12, marginTop: 20 },
     clearBtn:           { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
     clearBtnText:       { fontSize: 15, fontWeight: '700', color: '#666' },
     applyBtn:           { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: '#1a1a2e', alignItems: 'center' },
