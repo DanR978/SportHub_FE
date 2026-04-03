@@ -43,7 +43,7 @@ export default function WelcomeScreen({ onFinish }) {
                         ))}
                     </View>
                     <Animated.Text style={{ fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: 5, opacity: logoOpacity }}>
-                        SPORTHUB
+                        GAME RADAR
                     </Animated.Text>
                 </View>
                 <Animated.Text style={{ fontSize: 11, fontWeight: '700', color: '#16a34a', letterSpacing: 4, opacity: taglineOpacity }}>

@@ -2,7 +2,7 @@ import "dotenv/config";
 
 export default {
   expo: {
-    name: "SportMap",
+    name: "Game Radar",
     slug: "SportMap",
     version: "1.0.0",
     orientation: "portrait",
