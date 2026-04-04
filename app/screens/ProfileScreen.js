@@ -561,6 +561,7 @@ export default function ProfileScreen({ navigation }) {
                 onViewPhoto={() => setViewerOpen(true)}
                 onSelectPhoto={pickPhoto}
                 onEditAvatar={() => navigation.navigate('EditAvatar')}
+                onRemovePhoto={removePhoto}
             />
             <PhotoViewer visible={viewerOpen} uri={user.avatar_photo} onClose={() => setViewerOpen(false)} />
         </View>

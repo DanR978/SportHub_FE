@@ -66,9 +66,10 @@ export default function EventDetailScreen({ route, navigation }) {
     const [editData, setEditData]         = useState({});
     const [editLoading, setEditLoading]   = useState(false);
 
-    // Participants + Report
+    // Participants + Report + Bookmark
     const [participants, setParticipants] = useState([]);
     const [reportVisible, setReportVisible] = useState(false);
+    const [bookmarked, setBookmarked] = useState(false);
 
     // Edit location state
     const [editSuggestions, setEditSuggestions] = useState([]);
@@ -93,7 +94,15 @@ export default function EventDetailScreen({ route, navigation }) {
         try {
             const token = await getToken();
             const res = await fetch(`${API_URL}/sports-events/${eventId}`, { headers: { Authorization: `Bearer ${token}` } });
-            if (res.ok) setEvent(await res.json());
+            if (res.ok) {
+                setEvent(await res.json());
+                // Check bookmark status
+                const bmRes = await fetch(`${API_URL}/users/me/bookmarks`, { headers: { Authorization: `Bearer ${token}` } });
+                if (bmRes.ok) {
+                    const bookmarks = await bmRes.json();
+                    setBookmarked(bookmarks.some(b => b.event_id === eventId));
+                }
+            }
             else toast.error('Could not load event details');
         } catch (e) { toast.error('Check your internet and try again.', 'Connection Error'); }
         finally { setLoading(false); setRefreshing(false); }
@@ -135,9 +144,29 @@ export default function EventDetailScreen({ route, navigation }) {
         finally { setActionLoading(false); }
     };
 
+    // ── RICH SHARE ───────────────────────────────────────────────
     const handleShare = async () => {
-        try { await Share.share({ message: `Join me at ${event.title} on ${formatDate(event.start_date)} at ${event.location}! Find it on Game Radar.` }); }
-        catch {}
+        const shareUrl = `${API_URL}/events/${eventId}/share`;
+        const emoji = { soccer:'⚽', basketball:'🏀', tennis:'🎾', volleyball:'🏐', pickleball:'🏓', baseball:'⚾', football:'🏈' }[event.sport?.toLowerCase()] || '🏅';
+        try {
+            await Share.share({
+                message: `${emoji} ${event.title}\n📅 ${formatDate(event.start_date)} · ${formatTime(event.start_time)}\n📍 ${event.location}\n\nJoin me on Game Radar!\n${shareUrl}`,
+                url: shareUrl,
+            });
+        } catch {}
+    };
+
+    // ── BOOKMARK ─────────────────────────────────────────────────
+    const toggleBookmark = async () => {
+        try {
+            const token = await getToken();
+            const method = bookmarked ? 'DELETE' : 'POST';
+            await fetch(`${API_URL}/sports-events/${eventId}/bookmark`, {
+                method,
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setBookmarked(!bookmarked);
+        } catch {}
     };
 
     const handleDelete = () => {
@@ -213,7 +242,6 @@ export default function EventDetailScreen({ route, navigation }) {
         setEditVisible(true);
     };
 
-    // Edit location autocomplete
     const fetchEditSuggestions = useCallback((text) => {
         if (editDebounceRef.current) clearTimeout(editDebounceRef.current);
         if (!text || text.length < 3) { setEditSuggestions([]); setShowEditSuggestions(false); return; }
@@ -257,9 +285,7 @@ export default function EventDetailScreen({ route, navigation }) {
         fetchEditSuggestions(text);
     };
 
-    // Edit map pin-drop
     const openEditMap = async () => {
-        // Get user location for centering
         if (!editUserLocation) {
             try {
                 const { status } = await Location.requestForegroundPermissionsAsync();
@@ -298,7 +324,6 @@ export default function EventDetailScreen({ route, navigation }) {
             if (editData.max_players !== String(event.max_players)) body.max_players = parseInt(editData.max_players);
             if (editData.cost !== String(event.cost || 0)) body.cost = parseFloat(editData.cost) || 0;
             if (editData.experience_level.toLowerCase() !== event.experience_level) body.experience_level = editData.experience_level.toLowerCase();
-            // Send updated coordinates if location changed
             if (editPinCoords && (editPinCoords.latitude !== event.latitude || editPinCoords.longitude !== event.longitude)) {
                 body.latitude = editPinCoords.latitude;
                 body.longitude = editPinCoords.longitude;
@@ -352,6 +377,9 @@ export default function EventDetailScreen({ route, navigation }) {
                             <Ionicons name="create-outline" size={20} color="#3b82f6" />
                         </TouchableOpacity>
                     )}
+                    <TouchableOpacity style={styles.shareBtn} onPress={toggleBookmark}>
+                        <Ionicons name={bookmarked ? "heart" : "heart-outline"} size={20} color={bookmarked ? "#e94560" : "#1a1a2e"} />
+                    </TouchableOpacity>
                     <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
                         <Ionicons name="share-outline" size={20} color="#1a1a2e" />
                     </TouchableOpacity>
@@ -408,7 +436,6 @@ export default function EventDetailScreen({ route, navigation }) {
                             <Text style={styles.sectionTitle}>Location</Text>
                             <View style={styles.miniMapContainer}>
                                 {isFull && !event.joined && !isOrganizer ? (
-                                    /* Full event — hide exact location */
                                     <View style={styles.fullMapOverlay}>
                                         <View style={styles.fullMapIconCircle}>
                                             <Ionicons name="people" size={28} color="#e94560" />
@@ -417,7 +444,6 @@ export default function EventDetailScreen({ route, navigation }) {
                                         <Text style={styles.fullMapSub}>The exact location is hidden because all spots have been taken. Check back later if a spot opens up.</Text>
                                     </View>
                                 ) : (
-                                    /* Normal — show map + directions */
                                     <>
                                         <MapView key={`${event.latitude}-${event.longitude}`} style={styles.miniMap} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} pitchEnabled={false}
                                             initialRegion={{ latitude: event.latitude, longitude: event.longitude, latitudeDelta: 0.006, longitudeDelta: 0.006 }}
@@ -451,7 +477,6 @@ export default function EventDetailScreen({ route, navigation }) {
                             <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${fillPct}%`, backgroundColor: color }]} /></View>
                             <View style={styles.levelRow}><Ionicons name="bar-chart-outline" size={14} color="#999" /><Text style={styles.levelText}>{cap(event.experience_level)} level</Text></View>
 
-                            {/* Participant list */}
                             {participants.length > 0 && (
                                 <View style={styles.participantList}>
                                     {participants.map(p => (
@@ -500,7 +525,6 @@ export default function EventDetailScreen({ route, navigation }) {
                         )}
                     </View>
 
-                    {/* DELETE for organizer */}
                     {isOrganizer && (
                         <TouchableOpacity style={styles.deleteBtnRow} onPress={handleDelete}>
                             <Ionicons name="trash-outline" size={16} color="#e94560" />
@@ -508,7 +532,6 @@ export default function EventDetailScreen({ route, navigation }) {
                         </TouchableOpacity>
                     )}
 
-                    {/* REPORT for non-organizers */}
                     {!isOrganizer && (
                         <TouchableOpacity style={styles.reportBtnRow} onPress={() => setReportVisible(true)}>
                             <Ionicons name="flag-outline" size={14} color="#999" />
@@ -534,7 +557,7 @@ export default function EventDetailScreen({ route, navigation }) {
                 )}
             </View>
 
-            {/* RATE MODAL — pageSheet per Apple HIG */}
+            {/* RATE MODAL */}
             <Modal visible={rateVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setRateVisible(false)}>
                 <View style={styles.rateContainer}>
                     <View style={styles.rateModalHeader}>
@@ -542,52 +565,22 @@ export default function EventDetailScreen({ route, navigation }) {
                             <Text style={styles.rateCancel}>Cancel</Text>
                         </TouchableOpacity>
                         <Text style={styles.rateModalTitle}>Rate Host</Text>
-                        <TouchableOpacity
-                            onPress={submitRating}
-                            disabled={selectedRating === 0 || rateLoading}
-                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                        >
-                            {rateLoading
-                                ? <ActivityIndicator size="small" color="#f59e0b" />
-                                : <Text style={[styles.rateSubmitAction, selectedRating === 0 && { color: '#ccc' }]}>Submit</Text>
-                            }
+                        <TouchableOpacity onPress={submitRating} disabled={selectedRating === 0 || rateLoading} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                            {rateLoading ? <ActivityIndicator size="small" color="#f59e0b" /> : <Text style={[styles.rateSubmitAction, selectedRating === 0 && { color: '#ccc' }]}>Submit</Text>}
                         </TouchableOpacity>
                     </View>
-                    <ScrollView
-                        style={styles.rateBody}
-                        keyboardShouldPersistTaps="handled"
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={{ paddingBottom: 40 }}
-                    >
+                    <ScrollView style={styles.rateBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
                         <Text style={styles.rateSub}>How was your experience with {event.organizer_name}?</Text>
                         <View style={styles.starsRow}>
                             {[1,2,3,4,5].map(star => (
-                                <TouchableOpacity
-                                    key={star}
-                                    onPress={() => setSelectedRating(star)}
-                                    style={styles.starTouch}
-                                >
+                                <TouchableOpacity key={star} onPress={() => setSelectedRating(star)} style={styles.starTouch}>
                                     <Ionicons name={star <= selectedRating ? 'star' : 'star-outline'} size={40} color="#f59e0b" />
                                 </TouchableOpacity>
                             ))}
                         </View>
-                        {selectedRating > 0 && (
-                            <Text style={styles.rateLabel}>
-                                {['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'][selectedRating]}
-                            </Text>
-                        )}
+                        {selectedRating > 0 && <Text style={styles.rateLabel}>{['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'][selectedRating]}</Text>}
                         <Text style={styles.rateInputLabel}>Comment (optional)</Text>
-                        <TextInput
-                            style={styles.rateInput}
-                            placeholder="Share your experience..."
-                            placeholderTextColor="#bbb"
-                            value={rateComment}
-                            onChangeText={setRateComment}
-                            multiline
-                            numberOfLines={4}
-                            maxLength={300}
-                            textAlignVertical="top"
-                        />
+                        <TextInput style={styles.rateInput} placeholder="Share your experience..." placeholderTextColor="#bbb" value={rateComment} onChangeText={setRateComment} multiline numberOfLines={4} maxLength={300} textAlignVertical="top" />
                         <Text style={styles.rateCharCount}>{rateComment.length}/300</Text>
                     </ScrollView>
                 </View>
@@ -611,14 +604,7 @@ export default function EventDetailScreen({ route, navigation }) {
                             <Text style={styles.editLabel}>Location</Text>
                             <View style={styles.editLocationBox}>
                                 <Ionicons name="location-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                                <TextInput
-                                    style={styles.editLocationInput}
-                                    placeholder="Search for a place..."
-                                    placeholderTextColor="#bbb"
-                                    value={editData.location}
-                                    onChangeText={handleEditLocationChange}
-                                    onBlur={() => setTimeout(() => setShowEditSuggestions(false), 200)}
-                                />
+                                <TextInput style={styles.editLocationInput} placeholder="Search for a place..." placeholderTextColor="#bbb" value={editData.location} onChangeText={handleEditLocationChange} onBlur={() => setTimeout(() => setShowEditSuggestions(false), 200)} />
                                 <TouchableOpacity style={styles.editPinBtn} onPress={openEditMap}>
                                     <Ionicons name="map-outline" size={18} color="#16a34a" />
                                 </TouchableOpacity>
@@ -626,9 +612,7 @@ export default function EventDetailScreen({ route, navigation }) {
                             {showEditSuggestions && editSuggestions.length > 0 && (
                                 <View style={styles.editSuggestionsBox}>
                                     {editSuggestions.map((s, i) => (
-                                        <TouchableOpacity key={s.place_id || i}
-                                            style={[styles.editSuggestionRow, i < editSuggestions.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f5f5f5' }]}
-                                            onPress={() => selectEditSuggestion(s)}>
+                                        <TouchableOpacity key={s.place_id || i} style={[styles.editSuggestionRow, i < editSuggestions.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f5f5f5' }]} onPress={() => selectEditSuggestion(s)}>
                                             <Ionicons name="location" size={14} color="#16a34a" style={{ marginRight: 8 }} />
                                             <View style={{ flex: 1 }}>
                                                 <Text style={{ fontSize: 14, fontWeight: '600', color: '#1a1a2e' }} numberOfLines={1}>{s.structured_formatting?.main_text}</Text>
@@ -648,8 +632,7 @@ export default function EventDetailScreen({ route, navigation }) {
                             <Text style={styles.editLabel}>Experience Level</Text>
                             <View style={styles.editLevelRow}>
                                 {LEVELS.map(l => (
-                                    <TouchableOpacity key={l} style={[styles.editLevelChip, editData.experience_level === l && styles.editLevelChipActive]}
-                                        onPress={() => setEditData(p => ({...p, experience_level: l}))}>
+                                    <TouchableOpacity key={l} style={[styles.editLevelChip, editData.experience_level === l && styles.editLevelChipActive]} onPress={() => setEditData(p => ({...p, experience_level: l}))}>
                                         <Text style={[styles.editLevelText, editData.experience_level === l && styles.editLevelTextActive]}>{l}</Text>
                                     </TouchableOpacity>
                                 ))}
@@ -674,7 +657,7 @@ export default function EventDetailScreen({ route, navigation }) {
                         </ScrollView>
                     </View>
 
-                    {/* PIN-DROP MAP — nested inside edit modal so it opens on top */}
+                    {/* PIN-DROP MAP */}
                     <Modal visible={editMapVisible} animationType="slide">
                         <View style={{ flex: 1 }}>
                             <View style={styles.editMapHeader}>
@@ -691,18 +674,14 @@ export default function EventDetailScreen({ route, navigation }) {
                                 initialRegion={{
                                     latitude: editPinCoords?.latitude || editUserLocation?.latitude || event?.latitude || 38.9,
                                     longitude: editPinCoords?.longitude || editUserLocation?.longitude || event?.longitude || -77.0,
-                                    latitudeDelta: 0.08,
-                                    longitudeDelta: 0.08,
+                                    latitudeDelta: 0.08, longitudeDelta: 0.08,
                                 }}
-                                showsUserLocation
-                                showsMyLocationButton
-                                customMapStyle={CLEAN_MAP_STYLE}
+                                showsUserLocation showsMyLocationButton customMapStyle={CLEAN_MAP_STYLE}
                                 onPress={(e) => setEditTempPin(e.nativeEvent.coordinate)}
                                 onLongPress={(e) => setEditTempPin(e.nativeEvent.coordinate)}
                             >
                                 {editTempPin && (
-                                    <Marker coordinate={editTempPin} draggable
-                                        onDragEnd={(e) => setEditTempPin(e.nativeEvent.coordinate)}>
+                                    <Marker coordinate={editTempPin} draggable onDragEnd={(e) => setEditTempPin(e.nativeEvent.coordinate)}>
                                         <View style={[styles.mapPin, { backgroundColor: '#16a34a' }]}>
                                             <Ionicons name="location" size={16} color="#fff" />
                                         </View>
@@ -728,13 +707,7 @@ export default function EventDetailScreen({ route, navigation }) {
             </Modal>
 
             {/* REPORT MODAL */}
-            <ReportModal
-                visible={reportVisible}
-                onClose={() => setReportVisible(false)}
-                targetType="event"
-                targetId={eventId}
-                targetName={event?.title}
-            />
+            <ReportModal visible={reportVisible} onClose={() => setReportVisible(false)} targetType="event" targetId={eventId} targetName={event?.title} />
         </View>
     );
 }
@@ -766,20 +739,17 @@ const styles = StyleSheet.create({
     infoDivider:         { height: 1, backgroundColor: '#f5f5f5', marginVertical: 8 },
     section:             { marginTop: 20 },
     sectionTitle:        { fontSize: 12, fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
-    // Mini map
     miniMapContainer:    { borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
     miniMap:             { height: 180, borderRadius: 16 },
     mapPin:              { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
     miniMapLabel:        { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 10 },
     miniMapText:         { fontSize: 13, color: '#666', fontWeight: '500', flex: 1 },
-    // Full event overlay
     fullMapOverlay:      { backgroundColor: '#fef2f2', borderRadius: 16, padding: 28, alignItems: 'center' },
     fullMapIconCircle:   { width: 56, height: 56, borderRadius: 28, backgroundColor: '#fee2e2', justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
     fullMapTitle:        { fontSize: 17, fontWeight: '800', color: '#1a1a2e', marginBottom: 6 },
     fullMapSub:          { fontSize: 13, color: '#999', textAlign: 'center', lineHeight: 19 },
     navigateBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#16a34a', paddingVertical: 12, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
     navigateBtnText:     { color: '#fff', fontWeight: '700', fontSize: 14 },
-    // Players
     playersCard:         { backgroundColor: '#fff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
     playersHeader:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
     playersCount:        { fontSize: 16, fontWeight: '700', color: '#1a1a2e' },
@@ -791,13 +761,11 @@ const styles = StyleSheet.create({
     progressFill:        { height: 6, borderRadius: 3 },
     levelRow:            { flexDirection: 'row', alignItems: 'center', gap: 6 },
     levelText:           { fontSize: 13, color: '#999' },
-    // Participant list
     participantList:     { marginTop: 14, borderTopWidth: 1, borderTopColor: '#f5f5f5', paddingTop: 10 },
     participantRow:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 },
     participantName:     { fontSize: 14, fontWeight: '500', color: '#1a1a2e', flex: 1 },
     hostBadge:           { backgroundColor: '#dbeafe', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, marginRight: 4 },
     hostBadgeText:       { fontSize: 10, fontWeight: '800', color: '#3b82f6' },
-    // Report
     reportBtnRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 14 },
     reportBtnText:       { fontSize: 13, color: '#999' },
     descCard:            { backgroundColor: '#fff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
@@ -812,7 +780,6 @@ const styles = StyleSheet.create({
     rateBtnText:         { fontSize: 14, fontWeight: '700', color: '#f59e0b' },
     deleteBtnRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 28, paddingVertical: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#fecaca', backgroundColor: '#fef2f2' },
     deleteBtnText:       { fontSize: 14, fontWeight: '700', color: '#e94560' },
-    // Bottom bar
     bottomBar:           { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, paddingBottom: 36, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f0f0f0' },
     joinBtn:             { backgroundColor: '#16a34a', borderRadius: 14, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
     joinBtnText:         { color: '#fff', fontWeight: '800', fontSize: 16 },
@@ -821,7 +788,6 @@ const styles = StyleSheet.create({
     fullBtnBarText:      { color: '#ccc', fontWeight: '700', fontSize: 16 },
     hostingBadgeBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#dbeafe', borderRadius: 14, paddingVertical: 16, borderWidth: 1.5, borderColor: '#93c5fd' },
     hostingBadgeText:    { fontSize: 15, fontWeight: '700', color: '#3b82f6' },
-    // Rate modal — pageSheet
     rateContainer:       { flex: 1, backgroundColor: '#f8f9fb' },
     rateModalHeader:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 16, paddingHorizontal: 20, paddingBottom: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
     rateCancel:          { fontSize: 16, color: '#999', fontWeight: '600' },
@@ -835,7 +801,6 @@ const styles = StyleSheet.create({
     rateInputLabel:      { fontSize: 13, fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
     rateInput:           { backgroundColor: '#fff', borderRadius: 12, padding: 16, fontSize: 14, color: '#1a1a2e', minHeight: 100, textAlignVertical: 'top' },
     rateCharCount:       { fontSize: 11, color: '#bbb', textAlign: 'right', marginTop: 4 },
-    // Edit modal
     editContainer:       { flex: 1, backgroundColor: '#f8f9fb' },
     editHeader:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 56, paddingHorizontal: 20, paddingBottom: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
     editCancel:          { fontSize: 16, color: '#999', fontWeight: '600' },
@@ -849,7 +814,6 @@ const styles = StyleSheet.create({
     editLevelChipActive: { backgroundColor: '#1a1a2e', borderColor: '#1a1a2e' },
     editLevelText:       { fontSize: 13, fontWeight: '600', color: '#666' },
     editLevelTextActive: { color: '#fff' },
-    // Edit location
     editLocationBox:     { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, paddingLeft: 14, borderWidth: 1.5, borderColor: '#f0f0f0' },
     editLocationInput:   { flex: 1, fontSize: 15, color: '#1a1a2e', paddingVertical: 13 },
     editPinBtn:          { paddingHorizontal: 14, paddingVertical: 13 },

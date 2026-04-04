@@ -372,9 +372,13 @@ export default function AuthScreen({ onLogin, onSignup, cachedAccounts = [], onS
     const cardFade = useRef(new Animated.Value(0)).current;
     const fade     = useRef(new Animated.Value(1)).current;
 
+    const redirectUri = GOOGLE_IOS_CLIENT_ID
+        ? `com.googleusercontent.apps.${GOOGLE_IOS_CLIENT_ID.split('.')[0]}:/oauth2redirect`
+        : undefined;
+
     const [request, response, promptAsync] = Google.useAuthRequest({
         iosClientId: GOOGLE_IOS_CLIENT_ID,
-        redirectUri: 'com.googleusercontent.apps.187761642850-na0mblct6dtn9dqnaej7qn3v1ns5ongc:/oauth2redirect',
+        redirectUri,
     });
 
     useEffect(() => {
