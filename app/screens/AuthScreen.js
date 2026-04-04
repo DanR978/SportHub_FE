@@ -66,7 +66,7 @@ function LogoMark({ dark = false }) {
             <View style={{ width:32, height:32, borderRadius:16, backgroundColor: dark ? '#16a34a' : 'rgba(255,255,255,0.2)', justifyContent:'center', alignItems:'center' }}>
                 <Ionicons name="location" size={18} color={dark ? '#fff' : '#fff'} />
             </View>
-            <Text style={{ fontSize:22, fontWeight:'900', color: dark ? '#1a1a2e' : '#fff', letterSpacing:1 }}>SportMap</Text>
+            <Text style={{ fontSize:22, fontWeight:'900', color: dark ? '#1a1a2e' : '#fff', letterSpacing:1 }}>Game Radar</Text>
         </View>
     );
 }
@@ -528,7 +528,7 @@ export default function AuthScreen({ onLogin, onSignup, cachedAccounts = [], onS
                             <Ionicons name="location" size={20} color="#fff" />
                         </View>
                         <View>
-                            <Text style={s.logoText}>SportMap</Text>
+                            <Text style={s.logoText}>Game Radar</Text>
                             <Text style={s.logoSub}>FIND YOUR GAME</Text>
                         </View>
                     </View>

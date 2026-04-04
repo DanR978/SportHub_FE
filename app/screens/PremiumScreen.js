@@ -6,15 +6,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getToken } from '../services/auth';
 import { API_URL } from '../config';
+import Purchases from 'react-native-purchases';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PremiumScreen — shown when a free user tries to create a paid event
-// or navigated from Settings
+// PremiumScreen — Real StoreKit subscription via RevenueCat
 //
-// For real IAP:
-// 1. npm install react-native-purchases (RevenueCat) or expo-in-app-purchases
-// 2. Replace handlePurchase() with real StoreKit/Play Store purchase flow
-// 3. On successful purchase, call POST /users/me/premium/activate
+// Setup required:
+// 1. Create subscription in App Store Connect (see PREMIUM_SETUP.md)
+// 2. Create RevenueCat account → connect to App Store Connect
+// 3. Set REVENUECAT_API_KEY in EAS env vars
+// 4. Set REVENUECAT_SECRET_KEY on backend (Render env vars)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FEATURES = [
@@ -28,10 +29,16 @@ export default function PremiumScreen({ navigation, route }) {
     const [loading, setLoading] = useState(false);
     const [isPremium, setIsPremium] = useState(false);
     const [expires, setExpires] = useState(null);
+    const [offering, setOffering] = useState(null);
+    const [priceLabel, setPriceLabel] = useState('$4.99');
     const fromCreate = route?.params?.fromCreate || false;
 
-    useEffect(() => { checkStatus(); }, []);
+    useEffect(() => {
+        checkStatus();
+        loadOfferings();
+    }, []);
 
+    // ── Check premium status from our backend ────────────────────
     const checkStatus = async () => {
         try {
             const token = await getToken();
@@ -46,27 +53,98 @@ export default function PremiumScreen({ navigation, route }) {
         } catch {}
     };
 
+    // ── Load available subscription packages from RevenueCat ─────
+    const loadOfferings = async () => {
+        try {
+            const offerings = await Purchases.getOfferings();
+            if (offerings.current) {
+                setOffering(offerings.current);
+                // Get the monthly package price label from the store
+                const monthly = offerings.current.monthly;
+                if (monthly) {
+                    setPriceLabel(monthly.product.priceString);
+                }
+            }
+        } catch (e) {
+            console.log('RevenueCat offerings error:', e);
+        }
+    };
+
+    // ── Handle real purchase ─────────────────────────────────────
     const handlePurchase = async () => {
-        // ── PLACEHOLDER ──
-        // Replace this with real IAP via RevenueCat or expo-in-app-purchases
-        // After successful purchase receipt validation, call the activate endpoint
+        if (!offering?.monthly) {
+            Alert.alert('Error', 'Subscription not available. Please try again later.');
+            return;
+        }
+
         setLoading(true);
         try {
-            const token = await getToken();
-            const res = await fetch(`${API_URL}/users/me/premium/activate`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
+            // 1. Trigger the real StoreKit purchase via RevenueCat
+            const { customerInfo } = await Purchases.purchasePackage(offering.monthly);
+
+            // 2. Check if the entitlement is now active
+            const isActive = customerInfo.entitlements.active['premium'] !== undefined;
+
+            if (isActive) {
+                // 3. Notify our backend to activate premium
+                const token = await getToken();
+                const rcUserId = await Purchases.getAppUserID();
+                await fetch(`${API_URL}/users/me/premium/activate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ revenuecat_user_id: rcUserId }),
+                });
+
                 setIsPremium(true);
-                Alert.alert('Welcome to Premium!', 'You can now create paid events. Go back and set your price.', [
-                    { text: 'OK', onPress: () => navigation.goBack() },
-                ]);
-            } else {
-                Alert.alert('Error', 'Could not activate premium. Try again.');
+                Alert.alert(
+                    'Welcome to Premium!',
+                    'You can now create paid events. Go back and set your price.',
+                    [{ text: 'OK', onPress: () => navigation.goBack() }]
+                );
             }
-        } catch {
-            Alert.alert('Error', 'Connection error. Please try again.');
+        } catch (e) {
+            if (e.userCancelled) {
+                // User cancelled — do nothing
+            } else {
+                console.log('Purchase error:', e);
+                Alert.alert('Purchase Failed', 'Something went wrong. Please try again.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ── Restore previous purchases ───────────────────────────────
+    const handleRestore = async () => {
+        setLoading(true);
+        try {
+            const customerInfo = await Purchases.restorePurchases();
+            const isActive = customerInfo.entitlements.active['premium'] !== undefined;
+
+            if (isActive) {
+                // Sync with our backend
+                const token = await getToken();
+                const rcUserId = await Purchases.getAppUserID();
+                await fetch(`${API_URL}/users/me/premium/activate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ revenuecat_user_id: rcUserId }),
+                });
+
+                setIsPremium(true);
+                Alert.alert('Restored!', 'Your premium subscription has been restored.');
+            } else {
+                Alert.alert('No Subscription Found', 'We couldn\'t find an active subscription for this account.');
+            }
+        } catch (e) {
+            console.log('Restore error:', e);
+            Alert.alert('Error', 'Could not restore purchases. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -86,16 +164,16 @@ export default function PremiumScreen({ navigation, route }) {
                 <LinearGradient colors={['#f59e0b','#d97706']} style={s.heroIcon}>
                     <Ionicons name="diamond" size={36} color="#fff" />
                 </LinearGradient>
-                <Text style={s.heroTitle}>SportMap Premium</Text>
+                <Text style={s.heroTitle}>Game Radar Premium</Text>
                 <Text style={s.heroSub}>
                     {fromCreate
                         ? 'Upgrade to create events that charge an entry fee'
-                        : 'Unlock the full SportMap experience'}
+                        : 'Unlock the full Game Radar experience'}
                 </Text>
 
                 {/* Price */}
                 <View style={s.priceCard}>
-                    <Text style={s.priceAmount}>$4.99</Text>
+                    <Text style={s.priceAmount}>{priceLabel}</Text>
                     <Text style={s.pricePer}>/month</Text>
                 </View>
 
@@ -133,10 +211,13 @@ export default function PremiumScreen({ navigation, route }) {
                             ) : (
                                 <>
                                     <Ionicons name="diamond" size={18} color="#fff" />
-                                    <Text style={s.purchaseBtnText}>Subscribe for $4.99/month</Text>
+                                    <Text style={s.purchaseBtnText}>Subscribe for {priceLabel}/month</Text>
                                 </>
                             )}
                         </LinearGradient>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.restoreBtn} onPress={handleRestore} disabled={loading}>
+                        <Text style={s.restoreText}>Restore Purchases</Text>
                     </TouchableOpacity>
                     <Text style={s.legalText}>Cancel anytime. Subscription auto-renews monthly.</Text>
                 </View>
@@ -166,5 +247,7 @@ const s = StyleSheet.create({
     purchaseBtn:    { borderRadius: 16, overflow: 'hidden' },
     purchaseBtnInner:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 17 },
     purchaseBtnText:{ fontSize: 16, fontWeight: '800', color: '#fff' },
-    legalText:      { fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 10 },
+    restoreBtn:     { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
+    restoreText:    { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.4)' },
+    legalText:      { fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 4 },
 });

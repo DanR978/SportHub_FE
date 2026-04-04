@@ -17,3 +17,4 @@ export const API_URL = getApiUrl();
 export const GOOGLE_MAPS_API_KEY = extra.googleMapsApiKey || '';
 export const GOOGLE_IOS_CLIENT_ID = extra.googleIosClientId || '';
 export const APPLE_CLIENT_ID = extra.appleClientId || '';
+export const REVENUECAT_API_KEY = extra.revenueCatApiKey || '';

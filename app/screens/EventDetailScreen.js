@@ -136,7 +136,7 @@ export default function EventDetailScreen({ route, navigation }) {
     };
 
     const handleShare = async () => {
-        try { await Share.share({ message: `Join me at ${event.title} on ${formatDate(event.start_date)} at ${event.location}! Find it on SportMap.` }); }
+        try { await Share.share({ message: `Join me at ${event.title} on ${formatDate(event.start_date)} at ${event.location}! Find it on Game Radar.` }); }
         catch {}
     };
 

@@ -78,7 +78,7 @@ export default function ReportModal({ visible, onClose, targetType, targetId, ta
                         </View>
                         <Text style={s.successTitle}>Report submitted</Text>
                         <Text style={s.successSub}>
-                            We'll review your report and take action if needed. Thank you for helping keep SportMap safe.
+                            We'll review your report and take action if needed. Thank you for helping keep Game Radar safe.
                         </Text>
                         <TouchableOpacity style={s.doneBtn} onPress={onClose}>
                             <Text style={s.doneBtnText}>Done</Text>

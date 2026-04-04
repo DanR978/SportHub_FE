@@ -31,6 +31,8 @@ const SPORT_ICONS = {
 const ALL_SPORTS = ['Soccer','Basketball','Tennis','Volleyball','Pickleball','Baseball','Football','Handball','Softball','Dodgeball','Kickball'];
 const ALL_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'All Levels'];
 const ALL_PRICES = ['Free', 'Paid'];
+const RADIUS_OPTIONS = [5, 10, 25, 50, 100];
+const DEFAULT_RADIUS = 25;
 const cap = str => str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
 const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -108,6 +110,10 @@ export default function EventsScreen({ navigation }) {
     const [tempLevels, setTempLevels] = useState([]);
     const [tempPrices, setTempPrices] = useState([]);
 
+    // Distance radius
+    const [selectedRadius, setSelectedRadius] = useState(DEFAULT_RADIUS);
+    const [tempRadius, setTempRadius] = useState(DEFAULT_RADIUS);
+
     // Date range filter
     const [selectedDateFrom, setSelectedDateFrom] = useState(null);
     const [selectedDateTo, setSelectedDateTo] = useState(null);
@@ -151,7 +157,7 @@ export default function EventsScreen({ navigation }) {
                 if (userLocation) {
                     params.append('latitude', userLocation.latitude);
                     params.append('longitude', userLocation.longitude);
-                    params.append('radius_miles', '20');
+                    params.append('radius_miles', String(filters.radius ?? selectedRadius));
                 }
                 filters.sports?.forEach(s => params.append('sports', s.toLowerCase()));
                 filters.levels?.forEach(l => params.append('experience_levels', l.toLowerCase()));
@@ -192,6 +198,7 @@ export default function EventsScreen({ navigation }) {
         levels: overrides.levels ?? selectedLevels,
         dateFrom: overrides.dateFrom ?? selectedDateFrom,
         dateTo: overrides.dateTo ?? selectedDateTo,
+        radius: overrides.radius ?? selectedRadius,
     });
 
     // Fetch once location is ready
@@ -205,14 +212,14 @@ export default function EventsScreen({ navigation }) {
             if (locationReady) {
                 archiveThenFetch(buildFilterArgs());
             }
-        }, [locationReady, selectedSports, selectedLevels, selectedDateFrom, selectedDateTo, userLocation])
+        }, [locationReady, selectedSports, selectedLevels, selectedDateFrom, selectedDateTo, selectedRadius, userLocation])
     );
 
     // ── Pull to refresh ──────────────────────────────────────────
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         archiveThenFetch(buildFilterArgs());
-    }, [selectedSports, selectedLevels, selectedDateFrom, selectedDateTo, userLocation]);
+    }, [selectedSports, selectedLevels, selectedDateFrom, selectedDateTo, selectedRadius, userLocation]);
 
     // ── Join / Leave ─────────────────────────────────────────────
     const joinEvent = async (eventId) => {
@@ -243,24 +250,27 @@ export default function EventsScreen({ navigation }) {
     const openFilter = () => {
         setTempSports([...selectedSports]); setTempLevels([...selectedLevels]); setTempPrices([...selectedPrices]);
         setTempDateFrom(selectedDateFrom); setTempDateTo(selectedDateTo);
+        setTempRadius(selectedRadius);
         setShowFromPicker(false); setShowToPicker(false);
         setFilterVisible(true);
     };
     const applyFilters = () => {
         setSelectedSports([...tempSports]); setSelectedLevels([...tempLevels]); setSelectedPrices([...tempPrices]);
         setSelectedDateFrom(tempDateFrom); setSelectedDateTo(tempDateTo);
+        setSelectedRadius(tempRadius);
         setFilterVisible(false);
-        archiveThenFetch({ sports: tempSports, levels: tempLevels, dateFrom: tempDateFrom, dateTo: tempDateTo });
+        archiveThenFetch({ sports: tempSports, levels: tempLevels, dateFrom: tempDateFrom, dateTo: tempDateTo, radius: tempRadius });
     };
     const clearFilters = () => {
         setTempSports([]); setTempLevels([]); setTempPrices([]);
         setTempDateFrom(null); setTempDateTo(null);
+        setTempRadius(DEFAULT_RADIUS);
         setShowFromPicker(false); setShowToPicker(false);
     };
     const toggle = (list, setList, value) => setList(list.includes(value) ? list.filter(v => v !== value) : [...list, value]);
 
     const hasDateFilter = selectedDateFrom;
-    const activeFilterCount = selectedSports.length + selectedLevels.length + selectedPrices.length + (hasDateFilter ? 1 : 0);
+    const activeFilterCount = selectedSports.length + selectedLevels.length + selectedPrices.length + (hasDateFilter ? 1 : 0) + (selectedRadius !== DEFAULT_RADIUS ? 1 : 0);
     const filtered = events.filter(e => {
         const matchSearch = e.title.toLowerCase().includes(search.toLowerCase()) || e.location.toLowerCase().includes(search.toLowerCase());
         const matchPrice = selectedPrices.length === 0 || (selectedPrices.includes('Free') && (e.cost === 0 || e.cost === null)) || (selectedPrices.includes('Paid') && e.cost > 0);
@@ -602,6 +612,22 @@ export default function EventsScreen({ navigation }) {
                             </View>
                         )}
 
+                        {/* DISTANCE */}
+                        <Text style={styles.filterSection}>Distance</Text>
+                        <View style={styles.radiusRow}>
+                            {RADIUS_OPTIONS.map(r => (
+                                <TouchableOpacity
+                                    key={r}
+                                    style={[styles.radiusChip, tempRadius === r && styles.radiusChipActive]}
+                                    onPress={() => setTempRadius(r)}
+                                >
+                                    <Text style={[styles.radiusChipText, tempRadius === r && styles.radiusChipTextActive]}>
+                                        {r} mi
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
                         {/* SPORT */}
                         <Text style={styles.filterSection}>Sport</Text>
                         {ALL_SPORTS.map(sport => <CheckItem key={sport} label={sport} checked={tempSports.includes(sport)} onPress={() => toggle(tempSports, setTempSports, sport)} />)}
@@ -744,4 +770,10 @@ const styles = StyleSheet.create({
     clearBtnText:       { fontSize: 15, fontWeight: '700', color: '#666' },
     applyBtn:           { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: '#1a1a2e', alignItems: 'center' },
     applyBtnText:       { fontSize: 15, fontWeight: '700', color: '#fff' },
+    // Radius chips
+    radiusRow:          { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    radiusChip:         { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: '#f0f0f0', borderWidth: 1.5, borderColor: '#f0f0f0' },
+    radiusChipActive:   { backgroundColor: '#e8f5e9', borderColor: '#16a34a' },
+    radiusChipText:     { fontSize: 14, fontWeight: '600', color: '#999' },
+    radiusChipTextActive: { color: '#16a34a' },
 });

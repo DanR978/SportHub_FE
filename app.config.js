@@ -25,7 +25,7 @@ export default {
       },
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
-          "SportMap needs your location to show nearby events.",
+          "Game Radar needs your location to show nearby events.",
       },
     },
     android: {
@@ -51,6 +51,7 @@ export default {
       googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
       googleIosClientId: process.env.GOOGLE_IOS_CLIENT_ID,
       appleClientId: process.env.APPLE_CLIENT_ID,
+      revenueCatApiKey: process.env.REVENUECAT_API_KEY,
       eas: {
         projectId: "7e41a264-e270-4be4-9162-1714e804b8c8",
       }

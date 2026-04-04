@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
-import { View, Animated, ActivityIndicator } from 'react-native';
+import { View, Animated, ActivityIndicator, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import Purchases from 'react-native-purchases';
 
 import WelcomeScreen from './app/screens/WelcomeScreen';
 import AuthScreen from './app/screens/AuthScreen';
@@ -27,12 +28,17 @@ import {
     getTokenForEmail, getCachedAccounts,
     verifyCachedToken, removeTokenForEmail,
 } from './app/services/auth';
-import { API_URL } from './app/config';
+import { API_URL, REVENUECAT_API_KEY } from './app/config';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 import appCallbacks from './app/services/appCallbacks';
+
+// ── Initialize RevenueCat ────────────────────────────────────────────────────
+if (REVENUECAT_API_KEY) {
+    Purchases.configure({ apiKey: REVENUECAT_API_KEY });
+}
 
 function TabNavigator() {
     return (
@@ -153,6 +159,11 @@ export default function App() {
             const user = await res.json();
             await saveUserCache(user);
 
+            // Identify user in RevenueCat for subscription tracking
+            if (REVENUECAT_API_KEY && user.email) {
+                try { await Purchases.logIn(user.email); } catch {}
+            }
+
             // Silently archive any expired events on login
             fetch(`${API_URL}/sports-events/archive-expired`, {
                 method: 'POST',
@@ -239,6 +250,10 @@ export default function App() {
     };
 
     const handleLogout = async () => {
+        // Log out of RevenueCat too
+        if (REVENUECAT_API_KEY) {
+            try { await Purchases.logOut(); } catch {}
+        }
         await removeToken();
         const cached = await getCachedAccounts();
         setCachedUsers(cached || []);
@@ -246,6 +261,9 @@ export default function App() {
     };
 
     const handleDeleted = async () => {
+        if (REVENUECAT_API_KEY) {
+            try { await Purchases.logOut(); } catch {}
+        }
         await removeToken();
         await clearUserCache();
         setCachedUsers([]);
@@ -253,6 +271,9 @@ export default function App() {
     };
 
     const handleDeactivated = async () => {
+        if (REVENUECAT_API_KEY) {
+            try { await Purchases.logOut(); } catch {}
+        }
         await removeToken();
         const cached = await getCachedAccounts();
         setCachedUsers(cached || []);

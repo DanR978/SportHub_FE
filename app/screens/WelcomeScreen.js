@@ -42,7 +42,7 @@ export default function WelcomeScreen({ onFinish }) {
                             <Animated.View key={i} style={{ width: 5, height: barHeights[i], backgroundColor: '#16a34a', borderRadius: 3, transform: [{ scaleY: anim }], opacity: anim }} />
                         ))}
                     </View>
-                    <Animated.Text style={{ fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: 5, opacity: logoOpacity }}>
+                    <Animated.Text style={{ fontSize: 32, fontWeight: '900', color: '#fff', letterSpacing: 4, opacity: logoOpacity }}>
                         GAME RADAR
                     </Animated.Text>
                 </View>
