@@ -57,6 +57,7 @@ export default function SettingsScreen({ navigation }) {
             title: 'Account',
             items: [
                 { icon: 'person-outline', label: 'Edit Profile', onPress: () => navigation.navigate('EditProfile') },
+                { icon: 'diamond-outline', label: 'Game Radar Premium', premium: true, onPress: () => navigation.navigate('Premium') },
                 { icon: 'lock-closed-outline', label: 'Privacy', onPress: () => setPrivacyVisible(true) },
                 { icon: 'notifications-outline', label: 'Notifications', onPress: () => setNotifVisible(true) },
             ],
@@ -95,10 +96,10 @@ export default function SettingsScreen({ navigation }) {
                         <Text style={s.sectionTitle}>{section.title}</Text>
                         {section.items.map((item, ii) => (
                             <TouchableOpacity key={ii} style={s.item} onPress={item.onPress} activeOpacity={0.7}>
-                                <View style={[s.iconBox, item.danger && s.iconBoxDanger]}>
-                                    <Ionicons name={item.icon} size={19} color={item.danger ? '#e94560' : '#1a1a2e'} />
+                                <View style={[s.iconBox, item.danger && s.iconBoxDanger, item.premium && { backgroundColor: '#fffbeb' }]}>
+                                    <Ionicons name={item.icon} size={19} color={item.danger ? '#e94560' : item.premium ? '#f59e0b' : '#1a1a2e'} />
                                 </View>
-                                <Text style={[s.label, item.danger && { color: '#e94560' }]}>{item.label}</Text>
+                                <Text style={[s.label, item.danger && { color: '#e94560' }, item.premium && { color: '#f59e0b', fontWeight: '700' }]}>{item.label}</Text>
                                 {!item.danger && <Ionicons name="chevron-forward" size={18} color="#ccc" />}
                             </TouchableOpacity>
                         ))}
@@ -150,7 +151,7 @@ export default function SettingsScreen({ navigation }) {
                 <SectionText title="How does host rating work?" body="After participating in an event, you can rate the host from 1-5 stars. Host ratings help the community identify reliable organizers." />
                 <SectionText title="I forgot my password" body="On the login screen, tap 'Forgot password?' and enter your email. We'll send you a 6-digit code to reset your password." />
                 <SectionText title="How do I delete my account?" body="Go to Settings → Delete Account. You'll have the option to deactivate (temporary) or permanently delete your account and all associated data." />
-                <SectionText title="Contact us" body="For additional help, reach out to support@Game Radar.app. We typically respond within 24 hours." />
+                <SectionText title="Contact us" body="For additional help, reach out to support@gameradar.app. We typically respond within 24 hours." />
             </InfoModal>
 
             {/* ── Terms of Service Modal ── */}
@@ -162,7 +163,7 @@ export default function SettingsScreen({ navigation }) {
                 <SectionText title="5. Content" body="You retain ownership of content you post. By posting content on Game Radar, you grant us a license to display it within the app for the purpose of providing our service." />
                 <SectionText title="6. Termination" body="We may suspend or terminate your access at any time for violation of these terms. You may delete your account at any time through the Settings screen." />
                 <SectionText title="7. Changes" body="We may update these terms from time to time. Continued use of the app after changes constitutes acceptance of the new terms." />
-                <Text style={s.lastUpdated}>Last updated: March 2026</Text>
+                <Text style={s.lastUpdated}>Last updated: April 2026</Text>
             </InfoModal>
 
             {/* ── Privacy Policy Modal ── */}
@@ -172,8 +173,8 @@ export default function SettingsScreen({ navigation }) {
                 <SectionText title="Data Sharing" body="We do not sell your personal data. Your profile information (name, avatar, sports) is visible to other Game Radar users. We may share anonymized, aggregate data for analytics purposes." />
                 <SectionText title="Data Storage" body="Your data is stored securely on encrypted servers. Authentication tokens are stored locally on your device using secure storage." />
                 <SectionText title="Your Rights" body="You can access, edit, or delete your personal data at any time through the app. Deleting your account removes all your data from our servers." />
-                <SectionText title="Contact" body="For privacy-related questions, contact privacy@GameRadar.app." />
-                <Text style={s.lastUpdated}>Last updated: March 2026</Text>
+                <SectionText title="Contact" body="For privacy-related questions, contact privacy@gameradar.app." />
+                <Text style={s.lastUpdated}>Last updated: April 2026</Text>
             </InfoModal>
         </View>
     );
